@@ -78,6 +78,7 @@ textarea { width: 100%; min-height: 120px; font-family: var(--mono); font-size: 
   .grid2 { grid-template-columns: 1fr; }
   .form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
   .form input, .form select { min-width: 0; }
-  .form .unit { white-space: nowrap; }
+  .form .unit { white-space: normal; overflow-wrap: anywhere; font-size: 11px; }
+  .panel { padding: 8px; }
   .toolbar, .statusbar { flex-wrap: wrap; height: auto; padding: 6px 10px; row-gap: 4px; }
 }
