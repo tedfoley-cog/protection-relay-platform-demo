@@ -52,3 +52,7 @@ Agrees with the private oracle: internal fault operates (A-phase, diff 4.07 pu v
 * The PMU budget overran as soon as the channel count went 7 → 16; a new element that touches all bays should budget its DFT work explicitly (platform figure, not a surprise).
 * `R-51-002` and `R-21-003` surface on two fields each; the tool shows both, so a live demo should click the specific form.
 * Renode all-scenario run takes ~6 min on this VM; start it before narrating the design step.
+
+## After the recorded click-through
+
+The testing agent found three tool defects on the baseline (valid 51G TMS flagged alongside an invalid 51P TMS; reload reported "In sync" for unwritten edits; 375 px layout clipped). Fixed on `main`: rule errors are attributed to the culprit field by re-checking with the shared math (no rule logic duplicated in the tool), the written baseline is persisted separately from the draft, and the tree collapses to a horizontal bar under 720 px.
