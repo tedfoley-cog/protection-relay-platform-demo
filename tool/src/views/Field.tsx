@@ -2,7 +2,7 @@ import type { Violation } from "../lib/wasm";
 import { RULE_FIELDS } from "../lib/settings";
 
 export function fieldErrors(field: string, violations: Violation[]): Violation[] {
-  return violations.filter((v) => (RULE_FIELDS[v.id] ?? []).includes(field));
+  return violations.filter((v) => (v.fields ?? RULE_FIELDS[v.id] ?? []).includes(field));
 }
 
 interface NumFieldProps {

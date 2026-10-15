@@ -8,6 +8,8 @@ export interface Violation {
   id: string;
   message: string;
   detail: number;
+  /* Form fields the violation is attributed to (filled by checkSettings). */
+  fields?: string[];
   value: number;
 }
 
