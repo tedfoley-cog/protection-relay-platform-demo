@@ -3,7 +3,7 @@
 Runs every secondary-injection scenario on the STM32F407 image under Renode
 (tools/run_renode.py), the host PMU compliance suites
 (firmware/build/pmu_compliance), and the target memory footprint, and writes
-console/public/realtime.json.
+tool/public/realtime.json.
 
     python tools/build_realtime_report.py [--label baseline]
 """
@@ -24,7 +24,7 @@ import run_renode
 
 REPO = Path(__file__).resolve().parent.parent
 FIRMWARE = REPO / "firmware"
-PUBLIC = REPO / "console" / "public"
+PUBLIC = REPO / "tool" / "public"
 
 SCENARIO_T0_SOC = 1790000003  # SOC_AT_BOOT + preroll in target/stm32f407/main.c
 FAULT_START_S = 0.30
@@ -44,6 +44,12 @@ EXPECTED = {
                                  "elements": ["51G"], "bus_trip": False},
     "breaker_failure": {"description": "A-G zone 1 fault, feeder breaker stuck closed",
                         "elements": ["21Z1", "50BF-86B"], "bus_trip": True},
+    "bus_fault_external": {"description": "B-C fault on the bay-3 feeder (external to the bus zone)",
+                           "elements": [], "bus_trip": False},
+    "bus_fault_internal": {"description": "A-G fault on the bus (internal): no bus protection on this relay",
+                           "elements": [], "bus_trip": False},
+    "ct_lost_bay1_load": {"description": "Balanced load with the bay-1 CT circuit lost (inputs invalid)",
+                          "elements": [], "bus_trip": False},
 }
 
 # IEEE C37.118.1-2011 (+1a-2014) P-class test matrix. `suite` names a host

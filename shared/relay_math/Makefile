@@ -7,10 +7,7 @@ BUILD = build
 SRCS = toc_curve.c pu_scale.c settings_rules.c
 TOOL_WASM = ../../tool/src/wasm/relay_math.js
 EMCC ?= emcc
-EXPORTS = _rm_curve_count,_rm_curve_name,_rm_curve_from_name,_rm_toc_operate_time,_rm_toc_reset_time,\
-_rm_a_per_count,_rm_ct_ratio,_rm_secondary_a,_rm_base_a_from_mva,_rm_pu_from_a,\
-_rm_rules_input_count,_rm_rules_input_name,_rm_rule_count,_rm_rule_id,_rm_rule_message,\
-_rm_rules_check,_rm_violation_code,_rm_violation_detail,_rm_violation_value,_malloc,_free
+EXPORTS = _rm_curve_count,_rm_curve_name,_rm_curve_from_name,_rm_toc_operate_time,_rm_toc_reset_time,_rm_a_per_count,_rm_ct_ratio,_rm_secondary_a,_rm_base_a_from_mva,_rm_pu_from_a,_rm_rules_input_count,_rm_rules_input_name,_rm_rule_count,_rm_rule_id,_rm_rule_message,_rm_rules_check,_rm_violation_code,_rm_violation_detail,_rm_violation_value,_malloc,_free
 
 .PHONY: all lib vectors wasm clean
 

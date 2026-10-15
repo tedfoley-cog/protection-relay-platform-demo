@@ -14,8 +14,8 @@ static void add_error(settings_result_t *res, int line, const char *key, const c
     if (res->count < SETTINGS_MAX_ERRORS) {
         settings_error_t *e = &res->err[res->count];
         e->line = line;
-        snprintf(e->key, sizeof(e->key), "%s", key != NULL ? key : "");
-        snprintf(e->message, sizeof(e->message), "%s", msg);
+        snprintf(e->key, sizeof(e->key), "%.31s", key != NULL ? key : "");
+        snprintf(e->message, sizeof(e->message), "%.95s", msg);
     }
     res->count++;
 }

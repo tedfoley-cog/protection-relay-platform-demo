@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/main.tsx","./src/lib/settings.ts","./src/lib/wasm.ts","./src/views/BaysView.tsx","./src/views/ElementsView.tsx","./src/views/Field.tsx","./src/views/OvercurrentView.tsx","./src/views/RealtimeView.tsx","./src/views/WriteDrawer.tsx"],"version":"5.9.3"}

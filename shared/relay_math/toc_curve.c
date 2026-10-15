@@ -1,8 +1,15 @@
 #include "toc_curve.h"
 
+#include <stdbool.h>
+
 #include <math.h>
 #include <stddef.h>
 #include <string.h>
+
+static bool curve_valid(toc_curve_t curve)
+{
+    return (unsigned)curve < (unsigned)TOC_CURVE_COUNT;
+}
 
 static const char *const k_names[TOC_CURVE_COUNT] = {
     "IEC_SI", "IEC_VI", "IEC_EI", "IEC_LTI", "IEEE_MI", "IEEE_VI", "IEEE_EI", "DEFINITE",
@@ -32,7 +39,7 @@ toc_curve_def_t toc_curve_def(toc_curve_t curve)
 
 const char *toc_curve_name(toc_curve_t curve)
 {
-    return (curve >= 0 && curve < TOC_CURVE_COUNT) ? k_names[curve] : "UNKNOWN";
+    return curve_valid(curve) ? k_names[curve] : "UNKNOWN";
 }
 
 toc_curve_t toc_curve_from_name(const char *name)
@@ -50,7 +57,7 @@ toc_curve_t toc_curve_from_name(const char *name)
 
 float toc_curve_operate_time(toc_curve_t curve, float tms, float definite_s, float multiple)
 {
-    if (multiple <= 1.0f || curve < 0 || curve >= TOC_CURVE_COUNT) {
+    if (multiple <= 1.0f || !curve_valid(curve)) {
         return -1.0f;
     }
     if (curve == TOC_DEFINITE) {
@@ -67,7 +74,7 @@ float toc_curve_operate_time(toc_curve_t curve, float tms, float definite_s, flo
 
 float toc_curve_reset_time(toc_curve_t curve, float tms, float multiple)
 {
-    if (curve == TOC_DEFINITE || curve < 0 || curve >= TOC_CURVE_COUNT) {
+    if (curve == TOC_DEFINITE || !curve_valid(curve)) {
         return 0.0f;
     }
     toc_curve_def_t c = toc_curve_def(curve);

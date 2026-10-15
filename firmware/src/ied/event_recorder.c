@@ -52,6 +52,10 @@ const char *soe_code_name(uint16_t code)
         return "PPS_LOST";
     case SOE_TASK_OVERRUN:
         return "TASK_OVERRUN";
+    case SOE_INPUT_INVALID:
+        return "INPUT_INVALID";
+    case SOE_INPUT_VALID:
+        return "INPUT_VALID";
     default:
         return "?";
     }

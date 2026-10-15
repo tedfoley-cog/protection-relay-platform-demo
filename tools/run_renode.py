@@ -48,6 +48,9 @@ SCENARIOS = {
     "fault_bc_zone2": (2, 1.0),
     "fault_ag_high_resistance": (3, 2.2),
     "breaker_failure": (4, 0.8),
+    "bus_fault_external": (5, 1.0),
+    "bus_fault_internal": (6, 1.0),
+    "ct_lost_bay1_load": (7, 1.0),
 }
 
 TIMING_RE = re.compile(

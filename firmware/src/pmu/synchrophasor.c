@@ -62,12 +62,20 @@ pmu_measurement_t *pmu_estimate(pmu_estimator_t *est, const sample_history_t *h,
     uint32_t first_tick = newest_tick - (PMU_WINDOW_TAPS - 1u);
     uint32_t centre_tick = newest_tick - PMU_HALF_WINDOW;
 
+    /* Only the PMU's seven reported channels (bus VTs, bay-1 CTs) are
+     * estimated; the other bays stay in the protection pass. */
+    static const ied_channel_t k_pmu_ch[7] = {IED_CH_VA, IED_CH_VB, IED_CH_VC,
+                                              IED_CH_IA, IED_CH_IB, IED_CH_IC, IED_CH_IN};
     for (uint32_t ch = 0; ch < (uint32_t)IED_NUM_CHANNELS; ch++) {
+        m->phasor[ch] = cplx(0.0f, 0.0f);
+    }
+    for (uint32_t pc = 0; pc < 7u; pc++) {
+        ied_channel_t ch = k_pmu_ch[pc];
         float re = 0.0f;
         float im = 0.0f;
         for (uint32_t k = 0; k < PMU_WINDOW_TAPS; k++) {
             uint32_t tick = first_tick + k;
-            float x = sample_history_at(h, (ied_channel_t)ch, tick) * s_weight[k];
+            float x = sample_history_at(h, ch, tick) * s_weight[k];
             cplx_t ref = phasor_ref(sample_history_sis(h, tick));
             re += x * ref.re;
             im += x * ref.im;
