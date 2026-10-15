@@ -69,11 +69,15 @@ ul.violations code { font-family: var(--mono); color: var(--err); }
 textarea { width: 100%; min-height: 120px; font-family: var(--mono); font-size: 12px; border: 1px solid var(--line); padding: 8px; }
 
 @media (max-width: 720px) {
-  .body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .app { grid-template-rows: auto 1fr auto; height: 100dvh; }
+  .body { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
+  .main { min-width: 0; overflow: auto; }
   .tree { display: flex; overflow-x: auto; padding: 0; border-right: 0; border-bottom: 1px solid var(--line); }
   .tree h4 { display: none; }
   .tree a { white-space: nowrap; padding: 8px 10px; gap: 6px; }
   .grid2 { grid-template-columns: 1fr; }
-  .form { grid-template-columns: 1fr 1fr auto; }
+  .form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+  .form input, .form select { min-width: 0; }
+  .form .unit { white-space: nowrap; }
   .toolbar, .statusbar { flex-wrap: wrap; height: auto; padding: 6px 10px; row-gap: 4px; }
 }
