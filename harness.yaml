@@ -1,0 +1,73 @@
+# Machine-readable contract for an external Agentic SDLC orchestrator.
+# Human-readable explanation: docs/HARNESS_CONTRACT.md
+schema: relay-platform-harness/1
+repo: protection-relay-platform-demo
+
+commands:
+  build_firmware_host: make -C firmware sim
+  test_firmware_host: make -C firmware test
+  build_shared: make -C shared/relay_math all
+  build_shared_wasm: make -C shared/relay_math wasm        # needs emsdk on PATH
+  build_target: make -C firmware/target/stm32f407
+  run_target: python3 tools/run_renode.py --all
+  realtime_report: python3 tools/build_realtime_report.py  # fails on budget overrun
+  build_tool: npm --prefix tool run build
+  lint_tool: npm --prefix tool run lint
+  test_tool_e2e: npm --prefix tool run test:e2e
+  check_failure_modes: python3 tools/check_failure_modes.py
+  check_protected_paths: python3 tools/check_protected_paths.py
+  check_traceability: python3 tools/check_traceability.py
+  protocol_write: ./firmware/build/sim/settings_write settings/relay.set
+
+requirements:
+  id_pattern: '^REQ-(PLT|SAF|[0-9]{2,3}[A-Z]?)-[0-9]{3}$'
+  rule_id_pattern: '^R-([0-9]{2,3}[A-Z]?|BF|VT|CT)-[0-9]{3}$'
+  convention: docs/standards/REQUIREMENTS_CONVENTION.md
+  customer_inbox: requirements/customer/
+  element_docs: docs/elements/<ansi>/{REQUIREMENTS,DESIGN_SPEC,MANUAL_CHAPTER,VALIDATION_PLAN}.md
+  blocked_marker: BLOCKED
+
+safety:
+  classification: protection-function      # IEC 61508 context, not SIL-rated firmware
+  governing_standards:
+    - IEC 60255-1        # measuring relays and protection equipment, common requirements
+    - IEC 60255-151      # overcurrent functional requirements
+    - IEC 60255-187-1    # differential protection functional requirements
+    - IEC 61508-3        # software lifecycle discipline (informative)
+    - IEC 61850-7-4      # logical nodes and data objects
+    - IEEE C37.112       # inverse-time characteristics
+    - IEEE C37.118.1     # synchrophasor measurements
+  skill: .agents/skills/safety-critical-change/SKILL.md
+  coding_standard: docs/standards/CODING_STANDARD.md
+  interface_contracts: docs/standards/INTERFACE_CONTRACTS.md
+  design_spec_template: docs/templates/DESIGN_SPEC_TEMPLATE.md
+  validation_plan_template: docs/templates/VALIDATION_PLAN_TEMPLATE.md
+  performance_targets: docs/platform/PERFORMANCE_TARGETS.md
+  open_questions: docs/platform/OPEN_QUESTIONS.md
+
+protected_paths:                           # two human reviewers, CODEOWNERS enforced
+  protection: [firmware/src/prot/, firmware/src/ied/ied_app.c]
+  measurement_chain: [firmware/src/rt/, firmware/src/dsp/, firmware/include/ied_config.h, firmware/include/bay_config.h]
+  trip_logic: [firmware/src/ied/ied_app.c, firmware/src/ied/event_recorder.c]
+  shared_math: [shared/relay_math/]
+  settings_path: [firmware/src/ied/settings_file.c]
+
+failure_mode_checks:                       # tools/check_failure_modes.py
+  F1: data model mixed with settings, scaling or logic
+  F2: error handling removed in a refactor
+  F3: missing or invalid input treated as zero
+  F4: invalid differential data produces a trip on healthy load
+
+evidence_required_per_change:
+  - characterization tests pinned before the change
+  - failing test first, then the smallest fail-safe fix
+  - seeded invariant sweep >= 500 cases
+  - real-time report before and after (tool/public/realtime.json)
+  - blast-radius statement in the PR
+  - draft PR; merge needs two human reviews on protected paths
+
+assumptions:                               # what the external orchestrator must supply
+  - agent has shell access with gcc, arm-none-eabi-gcc, renode, node 20, emsdk
+  - agent opens draft PRs only; no direct pushes to main
+  - requirement owner answers BLOCKED items asynchronously via PR comments or requirements/customer/
+  - oracle / reference answers are held outside this repository

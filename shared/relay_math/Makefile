@@ -35,7 +35,7 @@ wasm: $(SRCS) wasm_exports.c *.h
 	mkdir -p $(dir $(TOOL_WASM))
 	$(EMCC) -O2 -std=c11 -Wall -Wextra -Werror $(SRCS) wasm_exports.c -o $(TOOL_WASM) \
 	  -sEXPORTED_FUNCTIONS=$(EXPORTS) -sEXPORTED_RUNTIME_METHODS=ccall,cwrap,UTF8ToString,HEAPF32 \
-	  -sMODULARIZE=1 -sEXPORT_ES6=1 -sENVIRONMENT=web,node -sSINGLE_FILE=1 -sALLOW_MEMORY_GROWTH=0 \
+	  -sMODULARIZE=1 -sEXPORT_ES6=1 -sENVIRONMENT=web -sSINGLE_FILE=1 -sALLOW_MEMORY_GROWTH=0 \
 	  -sFILESYSTEM=0 -sASSERTIONS=0
 	@echo "wrote $(TOOL_WASM)"
 

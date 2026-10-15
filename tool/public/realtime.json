@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-15T22:29:15+00:00",
+  "generated_at": "2026-10-15T22:35:50+00:00",
   "label": "baseline",
   "target": {
     "mcu": "STM32F407VG",
@@ -7,7 +7,7 @@
     "cpu_hz": 168000000,
     "emulator": "Renode 1.15.3",
     "resolution_cycles": 168,
-    "flash_bytes": 40348,
+    "flash_bytes": 40404,
     "ram_bytes": 16760,
     "method": "DWT cycle counter on the emulated core; instruction-accurate at 168 MIPS, no pipeline or flash wait-state model"
   },
@@ -17,7 +17,7 @@
     "pmu_hz": 60,
     "comms_hz": 120
   },
-  "worst_util_pct": 4.36,
+  "worst_util_pct": 3.77,
   "tasks": [
     {
       "task": "acq_isr",
@@ -45,19 +45,19 @@
       "task": "pmu",
       "rate_hz": 60,
       "budget_cycles": 30000,
-      "max_cycles": 33243,
-      "mean_cycles": 33165,
-      "max_us": 197.9,
-      "headroom_pct": -10.8,
+      "max_cycles": 16779,
+      "mean_cycles": 16690,
+      "max_us": 99.9,
+      "headroom_pct": 44.1,
       "worst_scenario": "steady_load",
-      "status": "over budget"
+      "status": "within budget"
     },
     {
       "task": "comms",
       "rate_hz": 120,
       "budget_cycles": 40000,
       "max_cycles": 15960,
-      "mean_cycles": 4670,
+      "mean_cycles": 4665,
       "max_us": 95.0,
       "headroom_pct": 60.1,
       "worst_scenario": "fault_ag_zone1",
@@ -76,7 +76,7 @@
       ],
       "bus_trip": false,
       "trip_ms": null,
-      "util_pct": 3.8,
+      "util_pct": 3.21,
       "pass": true
     },
     {
@@ -90,7 +90,7 @@
       ],
       "bus_trip": false,
       "trip_ms": 14.1,
-      "util_pct": 4.36,
+      "util_pct": 3.77,
       "pass": true
     },
     {
@@ -104,7 +104,7 @@
       ],
       "bus_trip": false,
       "trip_ms": 316.1,
-      "util_pct": 4.31,
+      "util_pct": 3.73,
       "pass": true
     },
     {
@@ -118,7 +118,7 @@
       ],
       "bus_trip": false,
       "trip_ms": 1372.4,
-      "util_pct": 4.25,
+      "util_pct": 3.66,
       "pass": true
     },
     {
@@ -134,7 +134,7 @@
       ],
       "bus_trip": true,
       "trip_ms": 14.1,
-      "util_pct": 4.36,
+      "util_pct": 3.77,
       "pass": true
     },
     {
@@ -148,7 +148,7 @@
       ],
       "bus_trip": false,
       "trip_ms": null,
-      "util_pct": 3.8,
+      "util_pct": 3.21,
       "pass": true
     },
     {
@@ -162,7 +162,7 @@
       ],
       "bus_trip": false,
       "trip_ms": null,
-      "util_pct": 3.83,
+      "util_pct": 3.24,
       "pass": true
     },
     {
@@ -176,7 +176,7 @@
       ],
       "bus_trip": false,
       "trip_ms": null,
-      "util_pct": 3.39,
+      "util_pct": 2.8,
       "pass": true
     }
   ],

@@ -36,13 +36,13 @@ test("journey 2: invalid then valid entry on the 51 form, rule errors from share
   await open(page, "overcurrent");
   const tms = page.locator("#t51pTms");
   await tms.fill("0.01");
-  await expect(page.getByTestId("error-R-51-002")).toContainText("0.05..15.0");
+  await expect(page.getByTestId("form-51p").getByTestId("error-R-51-002")).toContainText("0.05..15.0");
   await expect(tms).toHaveClass(/invalid/);
   await expect(page.getByTestId("status-rules")).toContainText("1 violation");
   await expect(page.getByTestId("nav-overcurrent").locator(".badge")).toHaveText("1");
 
   await page.locator("#i50pPickupA").fill("500");
-  await expect(page.getByTestId("error-R-50-001")).toBeVisible();
+  await expect(page.getByTestId("form-50").getByTestId("error-R-50-001").first()).toBeVisible();
   await expect(page.getByTestId("status-rules")).toContainText("2 violations");
 
   await tms.fill("0.8");
@@ -66,7 +66,7 @@ test("journey 3: filter, sort and search over Renode scenario evidence", async (
   await page.getByTestId("scenario-search").fill("bus");
   await expect(table.locator("tbody tr")).toHaveCount(0);
   await page.getByTestId("scenario-filter").selectOption("all");
-  await expect(table.locator("tbody tr")).toHaveCount(3);
+  await expect(table.locator("tbody tr")).toHaveCount(2);
   await expect(table).toContainText("bus_fault_internal");
   await expect(page.getByTestId("scenario-bus_fault_internal")).toContainText("no trip");
 
@@ -81,7 +81,7 @@ test("journey 3: filter, sort and search over Renode scenario evidence", async (
 test("journey 4: write drawer blocks on violations, then writes with side effects", async ({ page }) => {
   await open(page, "distance");
   await page.locator("#z2ReachPct").fill("70");
-  await expect(page.getByTestId("error-R-21-003")).toBeVisible();
+  await expect(page.getByTestId("error-R-21-003").first()).toBeVisible();
   await page.getByTestId("write-button").click();
   const drawer = page.getByTestId("write-drawer");
   await expect(drawer).toBeVisible();

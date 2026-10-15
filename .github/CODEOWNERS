@@ -1,0 +1,14 @@
+# Protected paths: two human approvals required (branch protection enforces
+# "require review from code owners" + 2 approvals). Teams are placeholders
+# for the customer's protection-engineering and firmware groups.
+firmware/src/prot/                @tedfoley-cog/protection-engineering @tedfoley-cog/firmware-leads
+firmware/src/ied/ied_app.c        @tedfoley-cog/protection-engineering @tedfoley-cog/firmware-leads
+firmware/src/ied/event_recorder.c @tedfoley-cog/protection-engineering @tedfoley-cog/firmware-leads
+firmware/src/ied/settings_file.c  @tedfoley-cog/protection-engineering @tedfoley-cog/firmware-leads
+firmware/src/rt/                  @tedfoley-cog/firmware-leads @tedfoley-cog/protection-engineering
+firmware/src/dsp/                 @tedfoley-cog/firmware-leads @tedfoley-cog/protection-engineering
+firmware/include/ied_config.h     @tedfoley-cog/firmware-leads @tedfoley-cog/protection-engineering
+firmware/include/bay_config.h     @tedfoley-cog/firmware-leads @tedfoley-cog/protection-engineering
+shared/relay_math/                @tedfoley-cog/protection-engineering @tedfoley-cog/firmware-leads
+harness.yaml                      @tedfoley-cog/firmware-leads
+.github/                          @tedfoley-cog/firmware-leads
