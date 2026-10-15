@@ -67,3 +67,13 @@ ul.violations code { font-family: var(--mono); color: var(--err); }
 .kv dd { margin: 0; font-family: var(--mono); }
 .detail { border-left: 3px solid var(--accent); padding-left: 10px; margin-top: 10px; }
 textarea { width: 100%; min-height: 120px; font-family: var(--mono); font-size: 12px; border: 1px solid var(--line); padding: 8px; }
+
+@media (max-width: 720px) {
+  .body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .tree { display: flex; overflow-x: auto; padding: 0; border-right: 0; border-bottom: 1px solid var(--line); }
+  .tree h4 { display: none; }
+  .tree a { white-space: nowrap; padding: 8px 10px; gap: 6px; }
+  .grid2 { grid-template-columns: 1fr; }
+  .form { grid-template-columns: 1fr 1fr auto; }
+  .toolbar, .statusbar { flex-wrap: wrap; height: auto; padding: 6px 10px; row-gap: 4px; }
+}

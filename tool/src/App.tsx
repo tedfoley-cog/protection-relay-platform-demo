@@ -18,6 +18,7 @@ const ROUTES: Array<{ id: Route; label: string; group: string }> = [
 ];
 
 const STORAGE_KEY = "relay-setting-tool.group";
+const WRITTEN_KEY = `${STORAGE_KEY}.written`;
 
 function readRoute(): Route {
   const h = window.location.hash.replace(/^#\/?/, "") as Route;
@@ -31,7 +32,14 @@ export default function App() {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     return saved ? (JSON.parse(saved) as Settings) : DEFAULT_SETTINGS;
   });
-  const [written, setWritten] = useState<Settings>(settings);
+  const [written, setWrittenState] = useState<Settings>(() => {
+    const saved = window.localStorage.getItem(WRITTEN_KEY);
+    return saved ? (JSON.parse(saved) as Settings) : DEFAULT_SETTINGS;
+  });
+  const setWritten = (s: Settings) => {
+    window.localStorage.setItem(WRITTEN_KEY, JSON.stringify(s));
+    setWrittenState(s);
+  };
   const [drawer, setDrawer] = useState(false);
   const [lastWrite, setLastWrite] = useState<string | null>(null);
 
