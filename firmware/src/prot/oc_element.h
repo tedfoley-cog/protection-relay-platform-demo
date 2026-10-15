@@ -6,7 +6,8 @@
  *     exactly for constant current and behaves correctly when the current
  *     changes during the timing interval (IEC 60255-151 clause 5.3).
  *     IEEE curves use the electromechanical-disc reset of IEEE C37.112;
- *     IEC curves reset instantaneously.
+ *     IEC curves reset instantaneously. The curve math itself lives in
+ *     shared/relay_math/toc_curve.c, shared with the setting tool.
  */
 #ifndef OC_ELEMENT_H
 #define OC_ELEMENT_H
@@ -14,16 +15,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef enum {
-    TOC_IEC_SI = 0,   /* IEC standard inverse   k=0.14  a=0.02 */
-    TOC_IEC_VI,       /* IEC very inverse       k=13.5  a=1    */
-    TOC_IEC_EI,       /* IEC extremely inverse  k=80    a=2    */
-    TOC_IEC_LTI,      /* IEC long-time inverse  k=120   a=1    */
-    TOC_IEEE_MI,      /* IEEE C37.112 moderately inverse */
-    TOC_IEEE_VI,      /* IEEE C37.112 very inverse */
-    TOC_IEEE_EI,      /* IEEE C37.112 extremely inverse */
-    TOC_DEFINITE
-} toc_curve_t;
+#include "toc_curve.h"
 
 typedef struct {
     float pickup_a;     /* Is, primary amps */
@@ -48,8 +40,6 @@ typedef struct {
     bool operated;
 } ioc_state_t;
 
-#define TOC_DROPOUT_RATIO 0.95f
-#define TOC_MAX_MULTIPLE  20.0f  /* curve evaluated up to 20 x Is */
 
 /* Operate time for a constant multiple M = I / Is; negative when M <= 1. */
 float toc_operate_time(const toc_settings_t *s, float multiple);

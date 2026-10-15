@@ -61,7 +61,7 @@ static inline const ied_status_t *loop_run(const scenario_t *sc, uint32_t uptime
         const ied_status_t *st = ied_status();
         testset_step(&loop_res.ts, st->trip1, st->tripb, raw);
         ied_set_breaker_open(loop_res.ts.breaker_open || loop_res.ts.bus_dead);
-        (void)ied_acq_isr(raw);
+        (void)ied_acq_isr_q(raw, testset_invalid_mask(&loop_res.ts));
         if (g_timebase.sample_in_second == 0u) {
             ied_pps_isr(TIMEBASE_TIMER_HZ);
         }

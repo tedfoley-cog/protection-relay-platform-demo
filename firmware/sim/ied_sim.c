@@ -187,7 +187,7 @@ int main(int argc, char **argv)
         s_scenario_t = (double)testset_time_s(&ts);
         testset_step(&ts, st->trip1, st->tripb, raw);
         ied_set_breaker_open(ts.breaker_open || ts.bus_dead);
-        (void)ied_acq_isr(raw);
+        (void)ied_acq_isr_q(raw, testset_invalid_mask(&ts));
         if (g_timebase.sample_in_second == 0u) {
             ied_pps_isr(TIMEBASE_TIMER_HZ);
         }

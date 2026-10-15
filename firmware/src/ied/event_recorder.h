@@ -18,7 +18,9 @@ typedef enum {
     SOE_BREAKER_CLOSED,
     SOE_PPS_LOCK,
     SOE_PPS_LOST,
-    SOE_TASK_OVERRUN
+    SOE_TASK_OVERRUN,
+    SOE_INPUT_INVALID,         /* detail: first invalid channel; elements on it blocked */
+    SOE_INPUT_VALID
 } soe_code_t;
 
 typedef struct {

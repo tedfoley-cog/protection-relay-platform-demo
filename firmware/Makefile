@@ -1,19 +1,20 @@
 CC ?= gcc
-INCLUDES = -Iinclude -Isrc -Isrc/dsp -Isrc/prot -Isrc/pmu -Isrc/rt -Isrc/ied -Itestset -Itests
+INCLUDES = -I../shared/relay_math -Iinclude -Isrc -Isrc/dsp -Isrc/prot -Isrc/pmu -Isrc/rt -Isrc/ied -Itestset -Itests
 CFLAGS ?= -std=c11 -Wall -Wextra -Werror $(INCLUDES)
 COVFLAGS = --coverage -O0 -g
 BUILD = build
 
 PLATFORM_SRCS = src/dnp3_outstation.c
+SHARED_SRCS = ../shared/relay_math/toc_curve.c ../shared/relay_math/pu_scale.c ../shared/relay_math/settings_rules.c
 IED_SRCS = src/dsp/phasor.c src/dsp/symcomp.c src/dsp/sample_history.c \
            src/prot/oc_element.c src/prot/distance.c src/prot/breaker_failure.c \
            src/prot/freq_element.c src/prot/trip_matrix.c \
            src/pmu/timebase.c src/pmu/synchrophasor.c src/pmu/c37118.c \
            src/rt/sample_ring.c src/rt/cycle_stats.c \
-           src/ied/event_recorder.c src/ied/ied_app.c
-SRCS = $(PLATFORM_SRCS) $(IED_SRCS)
+           src/ied/event_recorder.c src/ied/ied_app.c src/ied/settings_file.c
+SRCS = $(SHARED_SRCS) $(PLATFORM_SRCS) $(IED_SRCS)
 HOST_SRCS = sim/host_rt.c testset/testset.c
-HDRS = $(wildcard include/*.h src/*.h src/*/*.h testset/*.h tests/*.h)
+HDRS = $(wildcard ../shared/relay_math/*.h include/*.h src/*.h src/*/*.h testset/*.h tests/*.h)
 TEST_SRCS = $(wildcard tests/test_*.c)
 TEST_BINS = $(patsubst tests/%.c,$(BUILD)/%,$(TEST_SRCS))
 
@@ -38,8 +39,11 @@ coverage: test
 	@cd $(BUILD) && gcov -i -o . *.gcda > /dev/null 2>&1 || true
 	@echo "gcov json written to $(BUILD)"
 
-# Host closed-loop simulator and PMU compliance harness.
-sim: $(BUILD)/ied_sim $(BUILD)/pmu_compliance
+# Host closed-loop simulator, PMU compliance harness and the protocol-write CLI.
+sim: $(BUILD)/ied_sim $(BUILD)/pmu_compliance $(BUILD)/settings_write
+
+$(BUILD)/settings_write: sim/settings_write.c $(SRCS) $(HOST_SRCS) $(HDRS) | $(BUILD)
+	$(CC) $(CFLAGS) -O2 sim/settings_write.c $(SRCS) $(HOST_SRCS) -o $@ -lm
 
 $(BUILD)/ied_sim: sim/ied_sim.c $(SRCS) $(HOST_SRCS) $(HDRS) | $(BUILD)
 	$(CC) $(CFLAGS) -O2 sim/ied_sim.c $(SRCS) $(HOST_SRCS) -o $@ -lm

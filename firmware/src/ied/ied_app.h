@@ -1,4 +1,5 @@
-/* Feeder IED application: protection relay + synchrophasor unit.
+/* Relay application: protection elements + synchrophasor unit on the four-bay
+ * measurement chain (bay 1 is the relay's own feeder).
  *
  * Execution model (fixed-priority, preemptive, no RTOS):
  *
@@ -14,6 +15,7 @@
 #ifndef IED_APP_H
 #define IED_APP_H
 
+#include "bay_config.h"
 #include "breaker_failure.h"
 #include "distance.h"
 #include "event_recorder.h"
@@ -31,7 +33,10 @@
 #define IED_PMU_NUM_PHASORS 9u   /* VA VB VC IA IB IC IN V1 I1 */
 
 typedef struct {
+    /* scale[] for current channels is derived from bay[] by ied_settings_finalize();
+     * only the VT entries are set directly. */
     float scale[IED_NUM_CHANNELS];   /* primary units per ADC count */
+    bay_config_t bay[IED_NUM_BAYS];
     float v_ln_nominal;              /* nominal phase-to-neutral voltage, primary V RMS */
     float x_over_r;                  /* source X/R for the current mimic filters */
     ioc_settings_t i50p;
@@ -62,6 +67,8 @@ typedef struct {
     uint32_t pmu_frames;
     uint32_t pmu_overruns;
     uint32_t ring_overruns;
+    uint32_t invalid_mask;           /* channels not valid in the last frame */
+    uint32_t blocked_passes;         /* protection passes skipped for invalid bay-1 input */
 } ied_status_t;
 
 typedef struct {
@@ -76,9 +83,17 @@ extern timebase_t g_timebase;
 
 const ied_settings_t *ied_default_settings(void);
 
+/* Derives the current-channel scale from the bay CT ratios. Called by
+ * ied_init; exposed for the settings-file writer and tests. */
+void ied_settings_finalize(ied_settings_t *s);
+
 void ied_init(const ied_settings_t *s, uint32_t soc_at_boot, const ied_hooks_t *hooks);
 
-/* Returns the timer reload for the next sample period. */
+/* Returns the timer reload for the next sample period. `invalid_mask` marks
+ * channels whose input is not valid (CT/ADC supervision); bays without a CT
+ * source are added automatically. Elements fed by an invalid channel hold
+ * their state and do not operate — missing data is never read as zero. */
+uint32_t ied_acq_isr_q(const int16_t raw[IED_NUM_CHANNELS], uint32_t invalid_mask);
 uint32_t ied_acq_isr(const int16_t raw[IED_NUM_CHANNELS]);
 void ied_pps_isr(uint32_t counts_since_last_pps);
 

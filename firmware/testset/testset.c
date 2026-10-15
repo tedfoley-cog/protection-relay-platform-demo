@@ -51,7 +51,47 @@ static const scenario_t k_scenarios[] = {
         .fault = FAULT_AG, .fault_start_s = 0.30f, .fault_location_pct = 40.0f,
         .fault_r_ohm = 0.5f, .breaker_stuck = true,
     },
+    {
+        .name = "bus_fault_external",
+        .description = "B-C fault at 5% of the bay-3 feeder, cleared by bay 3's own relay at 0.4 s; "
+                       "external to the bus zone, bay currents sum to zero",
+        .duration_s = 1.0f, .freq_hz = 60.0f, .freq_end_hz = 60.0f,
+        .load_a = 320.0f, .load_pf = 0.95f,
+        .fault = FAULT_BC, .fault_start_s = 0.30f, .fault_location_pct = 5.0f,
+        .fault_r_ohm = 0.1f, .fault_zone = ZONE_BAY3_LINE, .external_clear_s = 0.40f,
+    },
+    {
+        .name = "bus_fault_internal",
+        .description = "A-G fault on the bus through 0.2 ohm; internal to the bus zone, "
+                       "uncleared: no element on this relay protects the bus",
+        .duration_s = 1.0f, .freq_hz = 60.0f, .freq_end_hz = 60.0f,
+        .load_a = 320.0f, .load_pf = 0.95f,
+        .fault = FAULT_AG, .fault_start_s = 0.30f, .fault_location_pct = 0.0f,
+        .fault_r_ohm = 0.2f, .fault_zone = ZONE_BUS,
+    },
+    {
+        .name = "ct_lost_bay1_load",
+        .description = "Balanced load with the bay-1 CT circuit lost: inputs invalid, "
+                       "no element may operate on the missing data",
+        .duration_s = 1.0f, .freq_hz = 60.0f, .freq_end_hz = 60.0f,
+        .load_a = 320.0f, .load_pf = 0.95f, .ct_lost_bay = 1u,
+    },
 };
+
+static const bay_config_t k_bays[IED_NUM_BAYS] = {
+    {"Feeder 1", BAY_ROLE_FEEDER, 1200.0f, 5.0f, BAY_POLARITY_TOWARD_LINE, 1u},
+    {"Transformer T1", BAY_ROLE_INFEED, 2000.0f, 5.0f, BAY_POLARITY_TOWARD_BUS, 1u},
+    {"Feeder 3", BAY_ROLE_FEEDER, 600.0f, 5.0f, BAY_POLARITY_TOWARD_BUS, 1u},
+    {"Feeder 4", BAY_ROLE_FEEDER, 800.0f, 5.0f, BAY_POLARITY_TOWARD_BUS, 1u},
+};
+#define BAY3_LOAD_A 180.0f
+#define BAY4_LOAD_A 240.0f
+#define INFEED_BAY  1u
+
+const bay_config_t *testset_default_bays(void)
+{
+    return k_bays;
+}
 
 int testset_scenario_count(void)
 {
@@ -156,19 +196,63 @@ void testset_solve_fault(fault_type_t type, float location_pct, float rf_ohm, cp
     }
 }
 
-static void load_flow(const scenario_t *sc, cplx_t v[3], cplx_t i[3])
+static void load_flow(const scenario_t *sc, cplx_t v[3], cplx_t i[IED_NUM_BAYS][3],
+                      cplx_t z_load[IED_NUM_BAYS])
 {
     cplx_t a = op_a();
     cplx_t a2 = op_a2();
     float phi = acosf(sc->load_pf > 0.0f ? sc->load_pf : 1.0f);
-    cplx_t ia = cplx_polar(sc->load_a, -phi);
-    cplx_t va = cplx_sub(cplx(E_LN_V, 0.0f), cplx_mul(k_zs1, ia));
+    float load_a[IED_NUM_BAYS] = {sc->load_a, 0.0f, BAY3_LOAD_A, BAY4_LOAD_A};
+    float total_a = load_a[0] + load_a[2] + load_a[3];
+    cplx_t itot = cplx_polar(total_a, -phi);
+    cplx_t va = cplx_sub(cplx(E_LN_V, 0.0f), cplx_mul(k_zs1, itot));
     v[0] = va;
     v[1] = cplx_mul(va, a2);
     v[2] = cplx_mul(va, a);
-    i[0] = ia;
-    i[1] = cplx_mul(ia, a2);
-    i[2] = cplx_mul(ia, a);
+    for (uint32_t bay = 0; bay < IED_NUM_BAYS; bay++) {
+        cplx_t ia = cplx_polar(load_a[bay], -phi);
+        if (bay == INFEED_BAY) {
+            ia = cplx_scale(itot, -1.0f);   /* out of the bus into the transformer = -infeed */
+        }
+        i[bay][0] = ia;
+        i[bay][1] = cplx_mul(ia, a2);
+        i[bay][2] = cplx_mul(ia, a);
+        z_load[bay] = (bay != INFEED_BAY && load_a[bay] > 0.0f) ? cplx_div_safe(va, ia, 1e-6f)
+                                                               : cplx(0.0f, 0.0f);
+    }
+}
+
+/* Fault-state currents of every bay from the faulted-path solution: the
+ * faulted bay carries i_path, the healthy feeders draw load from the
+ * depressed bus voltage and the infeed supplies the sum. */
+static void fault_flow(const testset_t *ts, fault_zone_t zone, const cplx_t v[3],
+                       const cplx_t i_path[3], cplx_t i[IED_NUM_BAYS][3])
+{
+    uint32_t faulted = zone == ZONE_BAY3_LINE ? 2u : 0u;
+    for (int ph = 0; ph < 3; ph++) {
+        cplx_t sum = cplx(0.0f, 0.0f);
+        for (uint32_t bay = 0; bay < IED_NUM_BAYS; bay++) {
+            if (bay == INFEED_BAY) {
+                continue;
+            }
+            cplx_t ib;
+            if (zone != ZONE_BUS && bay == faulted) {
+                ib = i_path[ph];
+            } else {
+                cplx_t z = ts->z_load[bay];
+                ib = (z.re != 0.0f || z.im != 0.0f) ? cplx_div_safe(v[ph], z, 1e-6f)
+                                                    : cplx(0.0f, 0.0f);
+            }
+            i[bay][ph] = ib;
+            sum = cplx_add(sum, ib);
+        }
+        /* Bus fault: the source also feeds the fault; out-of-bus current of the
+         * infeed bay is -(loads + fault). */
+        if (zone == ZONE_BUS) {
+            sum = cplx_add(sum, i_path[ph]);
+        }
+        i[INFEED_BAY][ph] = cplx_scale(sum, -1.0f);
+    }
 }
 
 void testset_init(testset_t *ts, const scenario_t *sc, const float scale[IED_NUM_CHANNELS])
@@ -182,11 +266,16 @@ void testset_init(testset_t *ts, const scenario_t *sc, const float scale[IED_NUM
     ts->lcg = 0x2545F491u;
     ts->breaker_timer = -1;
     ts->bus_timer = -1;
-    load_flow(sc, ts->v_pre, ts->i_pre);
+    for (uint32_t bay = 0; bay < IED_NUM_BAYS; bay++) {
+        ts->polarity[bay] = (int8_t)k_bays[bay].polarity;
+    }
+    load_flow(sc, ts->v_pre, ts->i_pre, ts->z_load);
     if (sc->fault != FAULT_NONE) {
         float xr = 1.0f;
+        cplx_t i_path[3];
         testset_solve_fault(sc->fault, sc->fault_location_pct, sc->fault_r_ohm, ts->v_flt,
-                            ts->i_flt, &xr);
+                            i_path, &xr);
+        fault_flow(ts, sc->fault_zone, ts->v_flt, i_path, ts->i_flt);
         ts->fault_tau_samples = (xr / (CPLX_TWO_PI * IED_F_NOMINAL_HZ)) * (float)IED_SAMPLE_RATE_HZ;
     }
 }
@@ -246,13 +335,24 @@ void testset_step(testset_t *ts, bool trip1, bool tripb, int16_t raw[IED_NUM_CHA
         !ts->breaker_open) {
         ts->fault_active = true;
         ts->fault_n = ts->n;
-        for (int ph = 0; ph < 3; ph++) {
-            ts->dc_offset[ph] = inst(ts->i_flt[ph], theta) - inst(ts->i_pre[ph], theta);
+        for (uint32_t bay = 0; bay < IED_NUM_BAYS; bay++) {
+            for (int ph = 0; ph < 3; ph++) {
+                ts->dc_offset[bay][ph] =
+                    inst(ts->i_flt[bay][ph], theta) - inst(ts->i_pre[bay][ph], theta);
+            }
+        }
+    }
+    if (sc->fault_zone == ZONE_BAY3_LINE && ts->fault_active && !ts->external_cleared) {
+        float clear_s = sc->external_clear_s > 0.0f ? sc->external_clear_s : 0.4f;
+        if (t >= sc->fault_start_s + clear_s) {
+            ts->fault_active = false;
+            ts->external_cleared = true;
         }
     }
 
     /* Breaker models. */
     if (trip1 && !ts->breaker_open && ts->breaker_timer < 0 && !sc->breaker_stuck) {
+        /* Bay-1 breaker: clears a bay-1 line fault only. */
         ts->breaker_timer = TESTSET_BREAKER_SAMPLES;
     }
     if (tripb && !ts->bus_dead && ts->bus_timer < 0) {
@@ -260,7 +360,9 @@ void testset_step(testset_t *ts, bool trip1, bool tripb, int16_t raw[IED_NUM_CHA
     }
     if (ts->breaker_timer > 0 && --ts->breaker_timer == 0) {
         ts->breaker_open = true;
-        ts->fault_active = false;
+        if (sc->fault_zone == ZONE_BAY1_LINE) {
+            ts->fault_active = false;
+        }
     }
     if (ts->bus_timer > 0 && --ts->bus_timer == 0) {
         ts->bus_dead = true;
@@ -268,29 +370,67 @@ void testset_step(testset_t *ts, bool trip1, bool tripb, int16_t raw[IED_NUM_CHA
     }
 
     const cplx_t *v = ts->fault_active ? ts->v_flt : ts->v_pre;
-    const cplx_t *i = ts->fault_active ? ts->i_flt : ts->i_pre;
     float decay = 0.0f;
     if (ts->fault_active && ts->fault_tau_samples > 0.0f) {
         decay = expf(-(float)(ts->n - ts->fault_n) / ts->fault_tau_samples);
     }
 
-    float sum_i = 0.0f;
     for (int ph = 0; ph < 3; ph++) {
         float vv = ts->bus_dead ? 0.0f : inst(v[ph], theta);
-        float ii = 0.0f;
-        if (!ts->breaker_open && !ts->bus_dead) {
-            ii = inst(i[ph], theta);
-            if (ts->fault_active) {
-                /* Current cannot change instantaneously at inception. */
-                ii -= ts->dc_offset[ph] * decay;
-            }
-        }
         raw[IED_CH_VA + ph] = adc(vv, ts->scale[IED_CH_VA + ph], &ts->lcg);
-        raw[IED_CH_IA + ph] = adc(ii, ts->scale[IED_CH_IA + ph], &ts->lcg);
-        sum_i += ii;
     }
-    raw[IED_CH_IN] = adc(sum_i, ts->scale[IED_CH_IN], &ts->lcg);
+
+    float sum_bay1 = 0.0f;
+    for (uint32_t bay = 0; bay < IED_NUM_BAYS; bay++) {
+        const cplx_t *i = ts->fault_active ? ts->i_flt[bay] : ts->i_pre[bay];
+        for (int ph = 0; ph < 3; ph++) {
+            float ii = 0.0f;
+            bool open = ts->bus_dead || (bay == 0u && ts->breaker_open);
+            if (!open) {
+                ii = inst(i[ph], theta);
+                if (ts->fault_active) {
+                    /* Current cannot change instantaneously at inception. */
+                    ii -= ts->dc_offset[bay][ph] * decay;
+                }
+            }
+            if (bay == 0u) {
+                sum_bay1 += ii;
+            }
+            /* CT polarity: TOWARD_BUS reads current into the bus as positive. */
+            float measured = ts->polarity[bay] == (int8_t)BAY_POLARITY_TOWARD_BUS ? -ii : ii;
+            if (sc->ct_lost_bay == bay + 1u) {
+                measured = 0.0f;
+            }
+            ied_channel_t ch = IED_CH_BAY_I(bay, ph);
+            raw[ch] = adc(measured, ts->scale[ch], &ts->lcg);
+        }
+    }
+    raw[IED_CH_IN] = adc(sc->ct_lost_bay == 1u ? 0.0f : sum_bay1, ts->scale[IED_CH_IN], &ts->lcg);
 
     ts->phase_acc += (uint32_t)((ts->freq_hz / (float)IED_SAMPLE_RATE_HZ) * 4294967296.0f);
     ts->n++;
+}
+
+uint32_t testset_invalid_mask(const testset_t *ts)
+{
+    uint8_t bay = ts->sc->ct_lost_bay;
+    if (bay == 0u || bay > IED_NUM_BAYS) {
+        return 0u;
+    }
+    uint32_t mask = IED_BAY_MASK(bay - 1u);
+    if (bay == 1u) {
+        mask |= IED_CH_BIT(IED_CH_IN);
+    }
+    return mask;
+}
+
+cplx_t testset_bay_current(const testset_t *ts, uint32_t bay, int phase)
+{
+    if (bay >= IED_NUM_BAYS || phase < 0 || phase > 2) {
+        return cplx(0.0f, 0.0f);
+    }
+    if (ts->bus_dead || (bay == 0u && ts->breaker_open)) {
+        return cplx(0.0f, 0.0f);
+    }
+    return ts->fault_active ? ts->i_flt[bay][phase] : ts->i_pre[bay][phase];
 }

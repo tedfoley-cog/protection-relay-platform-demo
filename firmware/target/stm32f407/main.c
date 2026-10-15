@@ -203,7 +203,7 @@ void TIM2_IRQHandler(void)
         s_testset_max_cycles = 0u;
     }
 
-    uint32_t reload = ied_acq_isr(raw);
+    uint32_t reload = ied_acq_isr_q(raw, testset_invalid_mask(&s_ts));
     TIM2_ARR = reload - 1u;
 
     if (g_timebase.sample_in_second == 0u) {

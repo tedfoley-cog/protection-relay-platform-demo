@@ -24,6 +24,7 @@ typedef struct {
     uint32_t soc;
     uint16_t sample_in_second;
     int16_t raw[IED_NUM_CHANNELS];        /* simultaneous ADC counts */
+    uint32_t invalid_mask;                /* IED_CH_BIT(ch) set: input not valid this sample */
 } sample_frame_t;
 
 typedef struct {

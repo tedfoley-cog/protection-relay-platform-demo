@@ -4,6 +4,7 @@
 #include "cycle_stats.h"
 #include "dnp3_outstation.h"
 #include "phasor.h"
+#include "pu_scale.h"
 #include "sample_history.h"
 #include "sample_ring.h"
 #include "symcomp.h"
@@ -64,8 +65,15 @@ static ied_t s_ied;
 #define FAULT_HOLDOFF_TICKS  (IED_SAMPLE_RATE_HZ / 2u)  /* 0.5 s after the fault clears */
 
 static const ied_settings_t k_default_settings = {
-    /* 16-bit ADC: 0.75 V primary per count (VT 7200:120), 1.0 A per count (CT 1200:5). */
-    .scale = {0.75f, 0.75f, 0.75f, 1.0f, 1.0f, 1.0f, 1.0f},
+    /* 16-bit ADC: 0.75 V primary per count (VT 7200:120); current scales come
+     * from the bay table (bay 1: 1200/1200 = 1.0 A per count). */
+    .scale = {0.75f, 0.75f, 0.75f},
+    .bay = {
+        {"Feeder 1", BAY_ROLE_FEEDER, 1200.0f, 5.0f, BAY_POLARITY_TOWARD_LINE, 1u},
+        {"Transformer T1", BAY_ROLE_INFEED, 2000.0f, 5.0f, BAY_POLARITY_TOWARD_BUS, 1u},
+        {"Feeder 3", BAY_ROLE_FEEDER, 600.0f, 5.0f, BAY_POLARITY_TOWARD_BUS, 1u},
+        {"Feeder 4", BAY_ROLE_FEEDER, 800.0f, 5.0f, BAY_POLARITY_TOWARD_BUS, 1u},
+    },
     .v_ln_nominal = 7200.0f,
     .x_over_r = 4.0f,
     .i50p = {.pickup_a = 6000.0f, .security_passes = 2u},
@@ -99,7 +107,7 @@ static const ied_settings_t k_default_settings = {
         .tripb_mask = ELEM_BIT(ELEM_50BF_BUS),
     },
     .pmu_idcode = 4107u,
-    .station = "SUB12 FDR7 IED",
+    .station = "BUS1 FDR1 RELAY",
 };
 
 static const cplx_t k_line_z0 = {3.85f, 10.0f};
@@ -113,9 +121,43 @@ static const char *const k_digital_names[16] = {
     "52B", "PPS_LOCK", "", "", "", "", "", "",
 };
 
+static const ied_channel_t k_mimic_ch[4] = {IED_CH_IA, IED_CH_IB, IED_CH_IC, IED_CH_IN};
+static const ied_channel_t k_pmu_ch[7] = {IED_CH_VA, IED_CH_VB, IED_CH_VC,
+                                          IED_CH_IA, IED_CH_IB, IED_CH_IC, IED_CH_IN};
+#define BAY1_INPUT_MASK (IED_BAY_MASK(0) | IED_CH_BIT(IED_CH_IN))
+
 const ied_settings_t *ied_default_settings(void)
 {
-    return &k_default_settings;
+    static ied_settings_t finalized;
+    static bool ready;
+    if (!ready) {
+        finalized = k_default_settings;
+        ied_settings_finalize(&finalized);
+        ready = true;
+    }
+    return &finalized;
+}
+
+void ied_settings_finalize(ied_settings_t *s)
+{
+    for (uint32_t bay = 0; bay < IED_NUM_BAYS; bay++) {
+        float a_per_count = pu_a_per_count(s->bay[bay].ct_primary_a, IED_ADC_COUNTS_PER_CT_RATED);
+        for (uint32_t ph = 0; ph < IED_PHASES; ph++) {
+            s->scale[IED_CH_BAY_I(bay, ph)] = a_per_count;
+        }
+    }
+    s->scale[IED_CH_IN] = s->scale[IED_CH_IA];
+}
+
+static uint32_t disconnected_mask(const ied_settings_t *s)
+{
+    uint32_t m = 0u;
+    for (uint32_t bay = 0; bay < IED_NUM_BAYS; bay++) {
+        if (!s->bay[bay].ct_connected) {
+            m |= IED_BAY_MASK(bay);
+        }
+    }
+    return m;
 }
 
 static ied_settings_t s_active;
@@ -124,6 +166,7 @@ void ied_init(const ied_settings_t *s, uint32_t soc_at_boot, const ied_hooks_t *
 {
     memset(&s_ied, 0, sizeof(s_ied));
     s_active = s != NULL ? *s : k_default_settings;
+    ied_settings_finalize(&s_active);
     if (s_active.dist.k0.re == 0.0f && s_active.dist.k0.im == 0.0f) {
         cplx_t num = cplx_sub(k_line_z0, s_active.dist.z1_line);
         s_active.dist.k0 = cplx_div_safe(num, cplx_scale(s_active.dist.z1_line, 3.0f), 1e-6f);
@@ -167,10 +210,16 @@ void ied_init(const ied_settings_t *s, uint32_t soc_at_boot, const ied_hooks_t *
 
 uint32_t ied_acq_isr(const int16_t raw[IED_NUM_CHANNELS])
 {
+    return ied_acq_isr_q(raw, 0u);
+}
+
+uint32_t ied_acq_isr_q(const int16_t raw[IED_NUM_CHANNELS], uint32_t invalid_mask)
+{
     uint32_t t0 = rt_cycles();
     uint32_t reload = timebase_on_sample(&g_timebase);
 
     sample_frame_t frame;
+    frame.invalid_mask = invalid_mask | disconnected_mask(s_ied.s);
     frame.tick = g_timebase.tick;
     frame.uptime_s = g_timebase.uptime_s;
     frame.soc = g_timebase.soc;
@@ -215,9 +264,19 @@ static void ingest(const sample_frame_t *f)
         value[ch] = (float)f->raw[ch] * s_ied.s->scale[ch];
     }
     for (uint32_t k = 0; k < 4u; k++) {
-        value[IED_CH_IA + k] = mimic_step(&s_ied.mimic[k], value[IED_CH_IA + k]);
+        value[k_mimic_ch[k]] = mimic_step(&s_ied.mimic[k], value[k_mimic_ch[k]]);
     }
     sample_history_push(&s_ied.hist, f->tick, f->sample_in_second, value);
+    if (f->invalid_mask != s_ied.status.invalid_mask) {
+        uint32_t m = f->invalid_mask;
+        uint16_t first = 0u;
+        while (m != 0u && (m & 1u) == 0u) {
+            m >>= 1;
+            first++;
+        }
+        s_ied.status.invalid_mask = f->invalid_mask;
+        record(f->invalid_mask != 0u ? SOE_INPUT_INVALID : SOE_INPUT_VALID, first, 0.0f);
+    }
     s_ied.last_soc = f->soc;
     s_ied.last_sis = f->sample_in_second;
     s_ied.last_tick = f->tick;
@@ -243,6 +302,16 @@ static void protection_pass(const sample_frame_t *f)
     float imax = fmaxf(iph[0], fmaxf(iph[1], iph[2]));
 
     elem_mask_t op = 0u;
+    if ((f->invalid_mask & BAY1_INPUT_MASK) != 0u) {
+        /* Bay-1 CT data missing or invalid: hold every element that reads it.
+         * Frequency elements run on the VTs and are unaffected. */
+        op |= s_ied.freq_mask;
+        trip_matrix_step(&s->matrix, &s_ied.matrix, op, s_ied.breaker_open, false);
+        st->invalid_mask = f->invalid_mask;
+        st->blocked_passes++;
+        st->protection_passes++;
+        return;
+    }
     if (ioc_step(&s->i50p, &s_ied.i50p, imax)) {
         op |= ELEM_BIT(ELEM_50P);
     }
@@ -398,7 +467,7 @@ void ied_pmu_task(void)
 
     pmu_measurement_t *m = pmu_estimate(&s_ied.pmu, &s_ied.hist, tick);
     for (uint32_t k = 0; k < 4u; k++) {
-        m->phasor[IED_CH_IA + k] = mimic_compensate(&s_ied.mimic[k], m->phasor[IED_CH_IA + k]);
+        m->phasor[k_mimic_ch[k]] = mimic_compensate(&s_ied.mimic[k], m->phasor[k_mimic_ch[k]]);
     }
     m->i1 = mimic_compensate(&s_ied.mimic[0], m->i1);
     float v1_pu = cplx_abs(m->v1) / s_ied.s->v_ln_nominal;
@@ -432,8 +501,8 @@ void ied_pmu_task(void)
         d.stat |= C37118_STAT_TRIGGER | C37118_TRIG_DIGITAL;
     }
     d.num_phasors = IED_PMU_NUM_PHASORS;
-    for (uint32_t ch = 0; ch < (uint32_t)IED_NUM_CHANNELS; ch++) {
-        d.phasor[ch] = m->phasor[ch];
+    for (uint32_t k = 0; k < 7u; k++) {
+        d.phasor[k] = m->phasor[k_pmu_ch[k]];
     }
     d.phasor[7] = m->v1;
     d.phasor[8] = m->i1;
