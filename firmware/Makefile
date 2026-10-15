@@ -4,14 +4,14 @@ CFLAGS ?= -std=c11 -Wall -Wextra -Werror $(INCLUDES)
 COVFLAGS = --coverage -O0 -g
 BUILD = build
 
-FEEDER_SRCS = src/fault_detect.c src/recloser.c src/dnp3_outstation.c
+PLATFORM_SRCS = src/dnp3_outstation.c
 IED_SRCS = src/dsp/phasor.c src/dsp/symcomp.c src/dsp/sample_history.c \
            src/prot/oc_element.c src/prot/distance.c src/prot/breaker_failure.c \
            src/prot/freq_element.c src/prot/trip_matrix.c \
            src/pmu/timebase.c src/pmu/synchrophasor.c src/pmu/c37118.c \
            src/rt/sample_ring.c src/rt/cycle_stats.c \
            src/ied/event_recorder.c src/ied/ied_app.c
-SRCS = $(FEEDER_SRCS) $(IED_SRCS)
+SRCS = $(PLATFORM_SRCS) $(IED_SRCS)
 HOST_SRCS = sim/host_rt.c testset/testset.c
 HDRS = $(wildcard include/*.h src/*.h src/*/*.h testset/*.h tests/*.h)
 TEST_SRCS = $(wildcard tests/test_*.c)
