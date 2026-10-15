@@ -1,74 +1,95 @@
 ---
 name: safety-critical-change
-description: Mandatory procedure for any change to control logic in this repo — FLISR, state estimation, AGC, savecase ingest (backend/app), protection firmware (firmware/src) or legacy Habitat tasks (legacy/habitat). Pins current behaviour, reproduces the defect with a failing test, applies the smallest fail-safe fix, proves a safety invariant and opens a PR with the evidence. Invoke before editing any of those paths, including bug fixes, refactors and ports.
+description: Mandatory procedure for any change to protection firmware in this repo — protection elements (firmware/src/prot), trip logic and settings path (firmware/src/ied), the measurement chain (firmware/src/rt, firmware/src/dsp, firmware/include) and the shared relay math (shared/relay_math). Pins current behaviour, reproduces the defect or states the new requirement with a failing test, applies the smallest fail-safe change, proves a seeded safety invariant, re-runs the real-time report and opens a draft PR with the evidence. Invoke before editing any of those paths, including new elements, bug fixes, refactors and ports.
 ---
 
 # Safety-critical change
 
-These modules command breakers, reclosers and generators. A wrong answer re-energises a fault
-or moves a unit off schedule, so the bar is evidence, not plausibility. Do the steps in order
-and do not edit production code before step 3.
+This firmware trips breakers. A wrong answer either leaves a bus fault on the
+system or de-energises healthy feeders, so the bar is evidence, not
+plausibility. Do the steps in order and do not edit production code before
+step 3. `harness.yaml` lists the paths this applies to (`protected_paths`).
 
 ## 1. Baseline
 
 ```bash
-pip install -e './backend[dev]'
-pytest backend --cov=app --cov-branch --cov-report=term-missing
 make -C firmware test
+make -C shared/relay_math all
+python3 tools/build_realtime_report.py   # writes tool/public/realtime.json
+cp tool/public/realtime.json /tmp/realtime-before.json
 ```
 
-Record the coverage of the module you will touch. Everything must be green before you start.
+Everything must be green and every task within budget before you start.
+Keep `realtime-before.json`; the PR needs it.
 
 ## 2. Pin current behaviour
 
-Add `@pytest.mark.characterization` tests (C: a new `firmware/tests/test_*.c`) that pin what
-the module does **today** on the inputs it already handles correctly — every plan step,
-customer count and setpoint, not just one field. They must pass on the unmodified code and
-must not change in step 4. If one has to change, stop and explain why in the PR.
+Add a `firmware/tests/test_*.c` characterization test that pins what the
+touched module does **today** on inputs it already handles: every existing
+scenario's expected elements and trip time (`tools/build_realtime_report.py`
+`EXPECTED`), every operand, not just one. These tests must pass on the
+unmodified code and must not change in step 4. If one has to change, stop
+and explain why in the PR.
 
-## 3. Reproduce
+## 3. Reproduce or specify
 
-Write the smallest test that fails on the current code and demonstrates the defect in
-operational terms (e.g. "plan closes CB-1201 onto the faulted section"). Run it and keep the
-failure output for the PR. If you cannot make it fail, the defect is not confirmed: report
-that and stop — do not fix speculatively.
+* Defect: write the smallest test that fails on current code and states the
+  defect in protection terms ("51P operates on `ct_lost_bay1_load`"). Keep
+  the failure output. If you cannot make it fail, the defect is not
+  confirmed — report and stop.
+* New element or behaviour: write the failing test from the requirement row
+  (`REQ-xx-nnn` in the test name or a comment) before the element exists.
+  Use the secondary-injection test set (`firmware/testset`) and add a
+  scenario rather than mocking phasors.
+* Refactor or port: no defect to reproduce; the step-2 tests are the gate.
 
-Behaviour-preserving refactors and ports have no defect to reproduce: skip this step and let
-the step 2 tests be the gate.
+## 4. Smallest fail-safe change
 
-## 4. Minimal fail-safe fix
+Change the least code that makes step 3 pass while step 2 stays green.
+Fail-safe means: on any doubt (invalid input, CT not connected, settings not
+finalized, window not full) the element **blocks** — it does not trip, and it
+does not substitute zero or a stale value. `docs/standards/CODING_STANDARD.md`
+rules 3 and 4 apply; `python3 tools/check_failure_modes.py --base origin/main`
+must report zero findings.
 
-- Change only what the failing test needs. No drive-by refactors, renames or formatting.
-- When the input is ambiguous or incomplete, refuse (raise the module's error type or return a
-  manual-action plan). Never guess an operation on field equipment.
-- No new dependencies.
+## 5. Invariant sweep
 
-## 5. Prove it
+Add or extend a seeded sweep of at least 500 generated cases
+(`srand(fixed_seed)`, print the seed) over the element's input space and
+assert the safety property, for example:
 
-1. The step 3 test (if any) passes and every step 2 test passes unchanged.
-2. Add a safety-invariant test that states the rule the fix protects (e.g. "no restoration
-   step energises the faulted section") and check it over at least 500 inputs from a seeded
-   `random` generator, drawn from the module's own input space: radial and branched
-   topologies for FLISR, unit fleets and ACE values for AGC, measurement sets for state
-   estimation, records for savecase ingest. No new dependencies.
-3. Re-run the step 1 commands plus `ruff check backend tools`. Coverage of the touched module
-   must not drop.
-4. Firmware under `firmware/src/` also has to hold its real-time budget on the target. Run
-   `python tools/build_realtime_report.py` before and after the fix: it builds the STM32F407
-   image, boots it in Renode, plays every secondary-injection scenario and fails if any task
-   exceeds its cycle budget in `firmware/include/ied_config.h` or any scenario operates the
-   wrong element. Report worst-case cycles per task before → after. Never raise a budget to
-   make a fix fit. Time- or frequency-dependent defects should also be reproduced on the
-   emulated target (`python tools/run_renode.py --help`). Renode is instruction-accurate, not
-   cycle-accurate: say so, and do not present its numbers as silicon measurements.
+* no trip on any healthy-load case, including cases with one bay invalid;
+* trip on every internal-fault case above the stated margin;
+* operate time within the design-spec tolerance of the shared-math value.
 
-## 6. Pull request
+Print the case that fails, with its seed index, so it can be replayed.
 
-Open a PR against `main`; never merge it. The body must contain:
+## 6. Target evidence
 
-- **Defect** — one sentence in operational terms, plus the step 3 failure output.
-- **Root cause** — the faulty assumption, with file and line.
-- **Fix** — the diff in pseudocode and what now happens on ambiguous input.
-- **Evidence** — pinned-behaviour count, invariant cases run, coverage before → after, and for
-  firmware the worst-case cycles per task before → after against budget.
-- **Blast radius** — which inputs change behaviour and which provably do not.
+```bash
+make -C firmware/target/stm32f407
+python3 tools/run_renode.py --all
+python3 tools/build_realtime_report.py
+python3 tools/check_traceability.py
+```
+
+The protection task must stay within `IED_BUDGET_PROT_CYCLES` on every
+scenario. Compare `tool/public/realtime.json` with `/tmp/realtime-before.json`:
+every pre-existing scenario keeps its expected elements and its `trip_ms`
+within ±1 protection pass (2.1 ms).
+
+## 7. Draft PR
+
+Open a **draft** PR (never push to `main`). The description contains:
+
+1. the requirement rows addressed, with any `BLOCKED` rows left open;
+2. the step-3 failure output and the step-5 sweep summary (seed, cases);
+3. before/after real-time report table (tasks, worst scenario, headroom);
+4. a **blast-radius statement**: files touched, elements whose operands
+   changed, scenarios whose timing moved, what cannot have changed and why;
+5. the output of `tools/check_failure_modes.py` and
+   `tools/check_protected_paths.py --base origin/main`.
+
+Protected paths need two human approvals through CODEOWNERS; do not
+self-approve, do not merge, do not mark ready-for-review until the
+requirement owner has answered every `BLOCKED` row that the change depends on.

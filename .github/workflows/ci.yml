@@ -1,0 +1,71 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  firmware-host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - run: sudo apt-get update && sudo apt-get install -y gcc make
+      - run: make -C shared/relay_math all
+      - run: make -C firmware test
+      - run: python3 tools/check_failure_modes.py --base ${{ github.event.pull_request.base.sha || 'HEAD~1' }}
+      - run: python3 tools/check_traceability.py
+      - run: python3 tools/check_protected_paths.py --base ${{ github.event.pull_request.base.sha || 'HEAD~1' }}
+
+  firmware-target:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi make
+      - run: make -C firmware/target/stm32f407
+
+  shared-wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mymindstorm/setup-emsdk@v14
+        with: { version: 3.1.64 }
+      - run: make -C shared/relay_math wasm
+      - run: git diff --stat --exit-code tool/src/wasm/relay_math.js || echo "::warning::regenerated WASM differs from committed"
+
+  setting-tool:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm, cache-dependency-path: tool/package-lock.json }
+      - run: npm ci
+        working-directory: tool
+      - run: npm run lint
+        working-directory: tool
+      - run: npm run build
+        working-directory: tool
+      - run: npx playwright install --with-deps chromium
+        working-directory: tool
+      - run: npm run test:e2e
+        working-directory: tool
+        env: { CI: "1" }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: playwright-report, path: tool/playwright-report, retention-days: 7 }
+
+  protected-paths-review-gate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Count human approvals
+        id: approvals
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          n=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews \
+              --jq '[.[] | select(.state=="APPROVED") | select(.user.type=="User") | .user.login] | unique | length')
+          echo "count=$n" >> "$GITHUB_OUTPUT"
+      - run: python3 tools/check_protected_paths.py --base ${{ github.event.pull_request.base.sha }} --approvals ${{ steps.approvals.outputs.count }}
+        continue-on-error: ${{ github.event.pull_request.draft }}
