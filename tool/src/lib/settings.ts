@@ -198,11 +198,13 @@ export function rulesInput(s: Settings, rm: RelayMath): Float32Array {
 /* Attribute each violation to the field(s) that cause it, using the shared
  * math only: a candidate field is a culprit when resetting it to its default
  * makes the violation disappear. Ordering rules (R-21-003) keep both fields. */
+const RELATIONAL_RULES = new Set(["R-21-003", "R-BF-002", "R-81-001"]);
+
 export function checkSettings(s: Settings, rm: RelayMath): Violation[] {
   const found = rm.rulesCheck(rulesInput(s, rm));
   return found.map((v) => {
     const candidates = RULE_FIELDS[v.id] ?? [];
-    if (candidates.length < 2) return { ...v, fields: candidates };
+    if (candidates.length < 2 || RELATIONAL_RULES.has(v.id)) return { ...v, fields: candidates };
     const culprits = candidates.filter((f) => {
       const probe = { ...s, [f]: DEFAULT_SETTINGS[f as keyof Settings] } as Settings;
       return !rm.rulesCheck(rulesInput(probe, rm)).some((w) => w.id === v.id && w.detail === v.detail && w.value === v.value);
