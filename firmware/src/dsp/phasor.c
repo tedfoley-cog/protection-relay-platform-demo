@@ -71,3 +71,36 @@ cplx_t phasor_full_cycle(const sample_history_t *h, ied_channel_t ch, uint32_t n
     const float k = CPLX_SQRT2 / (float)IED_SAMPLES_PER_CYCLE;
     return cplx(re * k, im * k);
 }
+
+void phasor_full_cycle_multi(const sample_history_t *h, const ied_channel_t *ch, uint32_t count,
+                             uint32_t newest_tick, cplx_t *out)
+{
+    if (!s_tables_ready) {
+        phasor_tables_init();
+    }
+    if (count > (uint32_t)IED_NUM_CHANNELS) {
+        count = (uint32_t)IED_NUM_CHANNELS;
+    }
+    float re[IED_NUM_CHANNELS];
+    float im[IED_NUM_CHANNELS];
+    for (uint32_t c = 0; c < count; c++) {
+        re[c] = 0.0f;
+        im[c] = 0.0f;
+    }
+    for (uint32_t m = 0; m < IED_SAMPLES_PER_CYCLE; m++) {
+        uint32_t tick = newest_tick - m;
+        uint32_t slot = tick & (SAMPLE_HISTORY_LEN - 1u);
+        uint32_t n = h->sis[slot] & (IED_SAMPLES_PER_CYCLE - 1u);
+        float c_n = s_cos[n];
+        float s_n = s_sin[n];
+        for (uint32_t c = 0; c < count; c++) {
+            float x = h->x[ch[c]][slot];
+            re[c] += x * c_n;
+            im[c] -= x * s_n;
+        }
+    }
+    const float k = CPLX_SQRT2 / (float)IED_SAMPLES_PER_CYCLE;
+    for (uint32_t c = 0; c < count; c++) {
+        out[c] = cplx(re[c] * k, im[c] * k);
+    }
+}

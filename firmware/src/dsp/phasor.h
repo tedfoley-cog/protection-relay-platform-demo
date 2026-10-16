@@ -43,6 +43,13 @@ static inline cplx_t mimic_compensate(const mimic_filter_t *f, cplx_t phasor)
  * hold at least IED_SAMPLES_PER_CYCLE samples. */
 cplx_t phasor_full_cycle(const sample_history_t *h, ied_channel_t ch, uint32_t newest_tick);
 
+/* Same DFT for `count` channels in one sweep of the window: the slot index
+ * and reference rotation are computed once per tap and shared, which is what
+ * makes nine extra bay currents affordable in the protection pass. Results
+ * are bit-identical to phasor_full_cycle() per channel. count <= 16. */
+void phasor_full_cycle_multi(const sample_history_t *h, const ied_channel_t *ch, uint32_t count,
+                             uint32_t newest_tick, cplx_t *out);
+
 /* Reference rotation for sample-in-second index n: exp(-j*2*pi*n/32). */
 cplx_t phasor_ref(uint32_t sample_in_second);
 

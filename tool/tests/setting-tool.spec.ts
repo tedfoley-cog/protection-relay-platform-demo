@@ -61,10 +61,10 @@ test("journey 3: filter, sort and search over Renode scenario evidence", async (
 
   await page.getByTestId("scenario-filter").selectOption("trip");
   await expect(page.getByTestId("scenario-count")).toHaveText("5 of 8");
-  await expect(table.locator("tbody tr")).toHaveCount(4);
+  await expect(table.locator("tbody tr")).toHaveCount(5);
 
   await page.getByTestId("scenario-search").fill("bus");
-  await expect(table.locator("tbody tr")).toHaveCount(0);
+  await expect(table.locator("tbody tr")).toHaveCount(1);   /* bus_fault_internal now trips (87B) */
   await page.getByTestId("scenario-filter").selectOption("all");
   await expect(table.locator("tbody tr")).toHaveCount(2);
   await expect(table).toContainText("bus_fault_internal");
@@ -73,9 +73,9 @@ test("journey 3: filter, sort and search over Renode scenario evidence", async (
   await page.getByTestId("scenario-search").fill("");
   await page.getByTestId("sort-trip_ms").click();
   const first = table.locator("tbody tr").first();
-  await expect(first).toContainText("fault_ag_zone1");
+  await expect(first).toContainText("bus_fault_internal");   /* fastest trip: 87B */
   await page.getByTestId("sort-trip_ms").click();
-  await expect(table.locator("tbody tr").first()).not.toContainText("fault_ag_zone1");
+  await expect(table.locator("tbody tr").first()).not.toContainText("bus_fault_internal");
 });
 
 test("journey 4: write drawer blocks on violations, then writes with side effects", async ({ page }) => {

@@ -339,15 +339,25 @@ static void protection_pass(const sample_frame_t *f)
      * for this element, see REQ-87B-034). The element blocks itself on any
      * invalid in-zone channel, so it runs before the bay-1 hold below. */
     cplx_t i_bus[IED_NUM_BAYS][IED_PHASES];
+    ied_channel_t bus_ch[(IED_NUM_BAYS - 1u) * IED_PHASES];
+    cplx_t bus_ph[(IED_NUM_BAYS - 1u) * IED_PHASES];
+    uint32_t n_bus = 0u;
+    for (uint32_t bay = 1; bay < IED_NUM_BAYS; bay++) {
+        if (s->b87.bay_in_zone[bay] != 0u) {
+            for (uint32_t ph = 0; ph < IED_PHASES; ph++) {
+                bus_ch[n_bus++] = IED_CH_BAY_I(bay, ph);
+            }
+        }
+    }
+    phasor_full_cycle_multi(&s_ied.hist, bus_ch, n_bus, tick, bus_ph);
+    n_bus = 0u;
     for (uint32_t bay = 0; bay < IED_NUM_BAYS; bay++) {
         bool in_zone = s->b87.bay_in_zone[bay] != 0u;
         bool toward_bus = s->bay[bay].polarity == BAY_POLARITY_TOWARD_BUS;
         for (uint32_t ph = 0; ph < IED_PHASES; ph++) {
             cplx_t m = cplx(0.0f, 0.0f);
             if (in_zone) {
-                m = bay == 0u ? i[ph]
-                              : mimic_compensate(&s_ied.mimic_bus[bay - 1u][ph],
-                                                 phasor_full_cycle(&s_ied.hist, IED_CH_BAY_I(bay, ph), tick));
+                m = bay == 0u ? i[ph] : mimic_compensate(&s_ied.mimic_bus[bay - 1u][ph], bus_ph[n_bus++]);
             }
             i_bus[bay][ph] = toward_bus ? m : cplx_scale(m, -1.0f);
         }
