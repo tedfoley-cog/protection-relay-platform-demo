@@ -46,11 +46,24 @@ static inline void loop_on_pmu(const uint8_t *frame, size_t len, const pmu_measu
 
 /* Runs `sc` after a steady-state preroll; frames/events from the preroll are
  * discarded so assertions see only the scenario. */
+/* Same loop with an explicit settings group and extra channels forced invalid
+ * (OR-ed into the test set's own mask every frame). */
+static inline const ied_status_t *loop_run_ex(const scenario_t *sc, uint32_t uptime_s,
+                                              const ied_settings_t *settings,
+                                              uint32_t extra_invalid_mask);
+
 static inline const ied_status_t *loop_run(const scenario_t *sc, uint32_t uptime_s)
+{
+    return loop_run_ex(sc, uptime_s, ied_default_settings(), 0u);
+}
+
+static inline const ied_status_t *loop_run_ex(const scenario_t *sc, uint32_t uptime_s,
+                                              const ied_settings_t *settings,
+                                              uint32_t extra_invalid_mask)
 {
     memset(&loop_res, 0, sizeof(loop_res));
     ied_hooks_t hooks = {loop_on_pmu, loop_on_event, NULL};
-    const ied_settings_t *s = ied_default_settings();
+    const ied_settings_t *s = settings != NULL ? settings : ied_default_settings();
     ied_init(s, 1790000000u, &hooks);
     g_timebase.uptime_s = uptime_s;
     testset_init(&loop_res.ts, sc, s->scale);
@@ -61,7 +74,7 @@ static inline const ied_status_t *loop_run(const scenario_t *sc, uint32_t uptime
         const ied_status_t *st = ied_status();
         testset_step(&loop_res.ts, st->trip1, st->tripb, raw);
         ied_set_breaker_open(loop_res.ts.breaker_open || loop_res.ts.bus_dead);
-        (void)ied_acq_isr_q(raw, testset_invalid_mask(&loop_res.ts));
+        (void)ied_acq_isr_q(raw, testset_invalid_mask(&loop_res.ts) | extra_invalid_mask);
         if (g_timebase.sample_in_second == 0u) {
             ied_pps_isr(TIMEBASE_TIMER_HZ);
         }
