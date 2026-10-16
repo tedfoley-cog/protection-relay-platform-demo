@@ -31,15 +31,16 @@ nothing is ever substituted for a missing current.
 | VT nominal | `VT_V_LN_NOMINAL` | V | defines Ib with `87B_BASE_MVA` (A1) |
 | DFT window state | `protection_pass()` arming (`hist` full) | | element not evaluated until the window is full (REQ-87B-028) |
 
-All twelve bay currents pass through the same mimic filter (one per channel,
-`mimic_bus[3][3]` added for bays 2–4, same X/R setting) before the sample
-history, and every bay phasor is mimic-compensated the same way. Identical
-linear filters make the differential of a through current exactly zero
-through the DC-offset transient (REQ-87B-034). An earlier draft used raw DFT
-for bays 2–4 and produced a false differential during the first cycle of
-external faults in the sweep; that design is withdrawn. Q1 is therefore
-closed for 87B: the mimic is applied to bays 2–4 in `ingest()` (protection
-task, not the ISR), nine `mimic_step` per sample.
+Measurement (see §4): the element receives every bay's raw primary-amp
+sample of each frame from `ingest()` (before the bay-1 mimic), forms the
+polarity-corrected differential *sample* per phase and mimic-filters that one
+signal; the differential phasor is a 32-tap full-cycle DFT of those samples
+(same reference as `phasor_full_cycle`) with the mimic phase compensation.
+Restraint uses each bay's full-cycle RMS from a sliding sum of squares,
+re-anchored exactly one (bay, phase) per pass. By linearity this equals
+summing identically mimic-filtered bay phasors (REQ-87B-034) at a third of
+the DFT work; an earlier draft that ran nine extra bay DFTs per pass measured
+12 873 cycles on the target, over the 12 000 budget (REQ-87B-031).
 
 ## 3. Settings
 
@@ -67,11 +68,20 @@ Per-unit base (A1): Ib = `87B_BASE_MVA` / (sqrt(3) x VLL), VLL = sqrt(3) x
 `VT_V_LN_NOMINAL`; defaults give Ib = 926.0 A primary. Every pu quantity in
 this element is on Ib.
 
-Per phase p, in-zone bay set Z (REQ-87B-001, -002):
+Per phase p, in-zone bay set Z (REQ-87B-001, -002), per sample n:
 
-    I_k,p   = polarity_k x I_meas,k,p                 (primary A, into bus positive)
-    Id_p    = | sum_{k in Z} I_k,p | / Ib
-    Ir_p    = sum_{k in Z} | I_k,p | / Ib
+    d_p[n]  = sum_{k in Z} s_k x i_k,p[n]              (primary A, s_k = +1 into bus)
+    y_p[n]  = mimic(d_p[n])                            (same X/R filter as bay 1)
+    Id_p    = | DFT32(y_p) x phase_comp | / Ib         (once per protection pass)
+    Ir_p    = sum_{k in Z} sqrt( (1/32) sum_{m<32} i_k,p[n-m]^2 ) / Ib
+
+Id is the magnitude of the fundamental differential phasor; by linearity it
+equals the magnitude of the sum of identically filtered bay phasors. Ir is the
+sum of full-cycle RMS bay currents: for the fundamental it equals the sum of
+phasor magnitudes, and any DC offset or harmonic content raises it (restraint
+grows, i.e. the secure direction). RMS sums are sliding; one (bay, phase) sum
+is recomputed exactly from its 32 stored squares every pass, so every sum is
+re-anchored within 12 passes.
 
 Characteristic (A2, REQ-87B-005):
 
@@ -97,7 +107,7 @@ State machine, evaluated once per protection pass:
 | State | Entry | Exit |
 |---|---|---|
 | DISABLED | `87B_FUNCTION = DISABLED`; all flags false, counters zero | setting changes to ENABLED (via finalize, which resets state) |
-| BLOCKED | any in-zone bay channel invalid, or DFT window not full, or `cts_alarm` | condition clears; counters are held (not advanced) while BLOCKED |
+| BLOCKED | any in-zone bay channel invalid, or fewer than 8 valid passes (one window) since power-up / the last invalid pass, or `cts_alarm` | condition clears; counters are held (not advanced) while BLOCKED; no sample taken while invalid is ever decided on |
 | IDLE | enabled, not blocked, no phase above pickup | pickup on any phase |
 | PICKUP | Id_p > PU on some phase but below T | Id above T => OPERATE; Id below PU => IDLE |
 | OPERATE | `operate` true; trip matrix asserts TRIP1 and TRIPB (86B latched); SOE `OPERATE 87B` on the rising edge | `operate` falls when Id drops below T; TRIPB stays latched until `ied_reset_lockout()` (A6, REQ-87B-017) |
@@ -146,7 +156,7 @@ blocked transition logged once; CTS alarm logged as an SOE event with detail
 | Drop-out | Id below T; ratio 1.0 on the comparator, no intentional hysteresis | §4 |
 | Seal-in | TRIPB latched by the existing 86B path | REQ-87B-017 |
 | CTS alarm delay | `87B_CTS_DELAY` +/- 1 pass | §4 |
-| Cycles per pass | 9 additional `phasor_full_cycle` (bays 2–4, 32-tap complex MAC each), 9 `mimic_compensate`, 9 x 4 `mimic_step` per pass in `ingest()`, plus ~200 cycles of element arithmetic; estimate +2 500 to +4 000 cycles on 6 447 before (budget 12 000) | measured in `realtime.json` after (REQ-87B-031) |
+| Cycles per pass | per sample (x4): 12 squares into sliding sums, 3 differential sums, 3 `mimic_step`; per pass: 3 x 32-tap DFT, one 32-add re-anchor, 12 `sqrtf`, characteristic. Estimate +2 000 to +3 000 cycles on 6 447 before (budget 12 000). The nine-DFT variant measured 12 873 and was withdrawn | measured in `realtime.json` after (REQ-87B-031) |
 
 ## 8. Traceability
 
@@ -187,9 +197,10 @@ phasors, element call, SOE, operands), `firmware/src/ied/settings_file.c`
 and `tools/run_renode.py` (element name table, expectation), `tool/` (87B page,
 settings model), tests and docs.
 
-Measurement chain: bays 2–4 samples are now mimic-filtered in `ingest()`;
-nothing else reads bays 2–4 from the history (PMU and all feeder elements use
-bay 1 and the VTs), and bay-1 / VT processing is unchanged.
+Measurement chain: unchanged. `ingest()` hands the frame's raw bay samples
+to `bus_diff_87b_ingest()` before the bay-1 mimic; the sample history, the
+bay-1 mimic, the DFT and the PMU path are untouched. `firmware/tests/ied_loop.h`
+gains `loop_run_ex()` (settings group and extra invalid mask) for the tests.
 
 Elements affected: none of 50/51/21/81/50BF read anything 87B writes. The only
 behavioural change to an existing scenario is `bus_fault_internal`, which goes

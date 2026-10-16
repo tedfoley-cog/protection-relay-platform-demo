@@ -30,7 +30,7 @@ typedef struct {
     sample_ring_t ring;
     sample_history_t hist;
     mimic_filter_t mimic[4];   /* IA IB IC IN */
-    mimic_filter_t mimic_bus[IED_NUM_BAYS - 1u][IED_PHASES];   /* bays 2-4, identical filtering for 87B */
+    int8_t b87_sign[IED_NUM_BAYS];   /* +1: measured positive current flows into the bus */
 
     ioc_state_t i50p;
     ioc_state_t i50g;
@@ -202,10 +202,8 @@ void ied_init(const ied_settings_t *s, uint32_t soc_at_boot, const ied_hooks_t *
     for (int k = 0; k < 4; k++) {
         mimic_init(&s_ied.mimic[k], s_ied.s->x_over_r);
     }
-    for (uint32_t bay = 1; bay < IED_NUM_BAYS; bay++) {
-        for (uint32_t ph = 0; ph < IED_PHASES; ph++) {
-            mimic_init(&s_ied.mimic_bus[bay - 1u][ph], s_ied.s->x_over_r);
-        }
+    for (uint32_t bay = 0; bay < IED_NUM_BAYS; bay++) {
+        s_ied.b87_sign[bay] = s_ied.s->bay[bay].polarity == BAY_POLARITY_TOWARD_BUS ? 1 : -1;
     }
     ioc_init(&s_ied.i50p);
     ioc_init(&s_ied.i50g);
@@ -214,7 +212,7 @@ void ied_init(const ied_settings_t *s, uint32_t soc_at_boot, const ied_hooks_t *
     distance_init(&s_ied.dist);
     bf_init(&s_ied.bf);
     freq_init(&s_ied.freq);
-    bus_diff_87b_init(&s_ied.b87);
+    bus_diff_87b_init(&s_ied.b87, s_ied.s->x_over_r);
     trip_matrix_init(&s_ied.matrix);
     pmu_estimator_init(&s_ied.pmu);
     soe_init(&s_ied.soe);
@@ -287,17 +285,17 @@ static void ingest(const sample_frame_t *f)
     for (uint32_t ch = 0; ch < (uint32_t)IED_NUM_CHANNELS; ch++) {
         value[ch] = (float)f->raw[ch] * s_ied.s->scale[ch];
     }
+    /* 87B sees every bay's raw sample of this frame (REQ-87B-003) before the
+     * bay-1 mimic; it filters the differential itself. */
+    float bay_a[IED_NUM_BAYS][IED_PHASES];
+    for (uint32_t bay = 0; bay < IED_NUM_BAYS; bay++) {
+        for (uint32_t ph = 0; ph < IED_PHASES; ph++) {
+            bay_a[bay][ph] = value[IED_CH_BAY_I(bay, ph)];
+        }
+    }
+    bus_diff_87b_ingest(&s_ied.s->b87, &s_ied.b87, bay_a, s_ied.b87_sign, f->sample_in_second);
     for (uint32_t k = 0; k < 4u; k++) {
         value[k_mimic_ch[k]] = mimic_step(&s_ied.mimic[k], value[k_mimic_ch[k]]);
-    }
-    /* Bays 2-4 get the same mimic as bay 1 so that a through current seen by
-     * two bays cancels exactly in the 87B differential during the DC-offset
-     * transient (linear, identical filters; REQ-87B-034). */
-    for (uint32_t bay = 1; bay < IED_NUM_BAYS; bay++) {
-        for (uint32_t ph = 0; ph < IED_PHASES; ph++) {
-            ied_channel_t ch = IED_CH_BAY_I(bay, ph);
-            value[ch] = mimic_step(&s_ied.mimic_bus[bay - 1u][ph], value[ch]);
-        }
     }
     sample_history_push(&s_ied.hist, f->tick, f->sample_in_second, value);
     if (f->invalid_mask != s_ied.status.invalid_mask) {
@@ -334,36 +332,10 @@ static void protection_pass(const sample_frame_t *f)
     float iph[3] = {cplx_abs(i[0]), cplx_abs(i[1]), cplx_abs(i[2])};
     float imax = fmaxf(iph[0], fmaxf(iph[1], iph[2]));
 
-    /* 87B: every bay's phasors from this same frame (REQ-87B-003), current
-     * into the bus positive, all mimic-compensated identically (Q1 closed
-     * for this element, see REQ-87B-034). The element blocks itself on any
-     * invalid in-zone channel, so it runs before the bay-1 hold below. */
-    cplx_t i_bus[IED_NUM_BAYS][IED_PHASES];
-    ied_channel_t bus_ch[(IED_NUM_BAYS - 1u) * IED_PHASES];
-    cplx_t bus_ph[(IED_NUM_BAYS - 1u) * IED_PHASES];
-    uint32_t n_bus = 0u;
-    for (uint32_t bay = 1; bay < IED_NUM_BAYS; bay++) {
-        if (s->b87.bay_in_zone[bay] != 0u) {
-            for (uint32_t ph = 0; ph < IED_PHASES; ph++) {
-                bus_ch[n_bus++] = IED_CH_BAY_I(bay, ph);
-            }
-        }
-    }
-    phasor_full_cycle_multi(&s_ied.hist, bus_ch, n_bus, tick, bus_ph);
-    n_bus = 0u;
-    for (uint32_t bay = 0; bay < IED_NUM_BAYS; bay++) {
-        bool in_zone = s->b87.bay_in_zone[bay] != 0u;
-        bool toward_bus = s->bay[bay].polarity == BAY_POLARITY_TOWARD_BUS;
-        for (uint32_t ph = 0; ph < IED_PHASES; ph++) {
-            cplx_t m = cplx(0.0f, 0.0f);
-            if (in_zone) {
-                m = bay == 0u ? i[ph] : mimic_compensate(&s_ied.mimic_bus[bay - 1u][ph], bus_ph[n_bus++]);
-            }
-            i_bus[bay][ph] = toward_bus ? m : cplx_scale(m, -1.0f);
-        }
-    }
+    /* 87B decides on the samples it ingested for this frame; it blocks itself
+     * on any invalid in-zone channel, so it runs before the bay-1 hold below. */
     elem_mask_t op = 0u;
-    if (bus_diff_87b_step(&s->b87, &s_ied.b87, i_bus, f->invalid_mask)) {
+    if (bus_diff_87b_step(&s->b87, &s_ied.b87, f->invalid_mask)) {
         op |= ELEM_BIT(ELEM_87B);
     }
     if (s_ied.b87.blocked != st->b87.blocked && s_ied.b87.enabled) {

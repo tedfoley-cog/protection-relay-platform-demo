@@ -22,6 +22,36 @@ static const soe_event_t *find_operate(elem_id_t e)
     return NULL;
 }
 
+/* Synthetic secondary injection for the unit tests: pure 60 Hz sinusoids
+ * from the given into-bus phasors, four samples per protection pass, all
+ * bays wired with positive = into the bus. Returns the last step result. */
+static const int8_t k_into_bus[IED_NUM_BAYS] = {1, 1, 1, 1};
+static uint32_t s_sis;
+
+static bool feed_passes(const bus_diff_87b_settings_t *s, bus_diff_87b_state_t *st,
+                        const cplx_t i[IED_NUM_BAYS][3], uint32_t passes, uint32_t invalid_mask)
+{
+    bool op = false;
+    for (uint32_t p = 0; p < passes; p++) {
+        for (uint32_t k = 0; k < IED_PROT_DECIMATION; k++) {
+            float theta = CPLX_TWO_PI * (float)(s_sis & (IED_SAMPLES_PER_CYCLE - 1u)) /
+                          (float)IED_SAMPLES_PER_CYCLE;
+            float raw[IED_NUM_BAYS][IED_PHASES];
+            for (uint32_t bay = 0; bay < IED_NUM_BAYS; bay++) {
+                for (uint32_t ph = 0; ph < IED_PHASES; ph++) {
+                    raw[bay][ph] = CPLX_SQRT2 * (i[bay][ph].re * cosf(theta) - i[bay][ph].im * sinf(theta));
+                }
+            }
+            bus_diff_87b_ingest(s, st, raw, k_into_bus, s_sis);
+            s_sis = (s_sis + 1u) % IED_SAMPLE_RATE_HZ;
+        }
+        op = bus_diff_87b_step(s, st, invalid_mask);
+    }
+    return op;
+}
+
+#define SETTLE_PASSES (2u * BUS_DIFF_87B_ARM_PASSES)
+
 static void set_bay(cplx_t i[IED_NUM_BAYS][3], uint32_t bay, float a_mag, float deg)
 {
     float rad = deg * 3.14159265f / 180.0f;
@@ -68,28 +98,32 @@ static void test_no_operate_below_characteristic(void)
     TH_CASE("T-87B-04 REQ-87B-004: Id below pickup or below T(Ir) does not operate");
     bus_diff_87b_settings_t s = ied_default_settings()->b87;
     bus_diff_87b_state_t st;
-    bus_diff_87b_init(&st);
+    bus_diff_87b_init(&st, 5.6f);
     cplx_t i[IED_NUM_BAYS][3];
     /* Id = 0.15 pu, Ir = 0.2 pu: below pickup */
     set_bay(i, 0, 0.175f * s.base_a, 0.0f);
     set_bay(i, 1, -0.025f * s.base_a, 0.0f);
     set_bay(i, 2, 0.0f, 0.0f);
     set_bay(i, 3, 0.0f, 0.0f);
-    TH_ASSERT(!bus_diff_87b_step(&s, &st, i, 0u));
+    TH_ASSERT(!feed_passes(&s, &st, i, SETTLE_PASSES, 0u));
+    TH_ASSERT(!st.blocked);
     TH_ASSERT(!st.pickup[0] && !st.operated);
+    TH_ASSERT_NEAR(st.id_pu[0], 0.15, 0.005);
+    TH_ASSERT_NEAR(st.ir_pu[0], 0.20, 0.005);
     /* Id = 0.5 pu, Ir = 4.0 pu: above pickup, below T = 1.70 */
     set_bay(i, 0, 2.25f * s.base_a, 0.0f);
     set_bay(i, 1, -1.75f * s.base_a, 0.0f);
-    TH_ASSERT(!bus_diff_87b_step(&s, &st, i, 0u));
+    TH_ASSERT(!feed_passes(&s, &st, i, SETTLE_PASSES, 0u));
     TH_ASSERT(st.pickup[0]);
     TH_ASSERT(!st.operated);
     TH_ASSERT_NEAR(st.id_pu[0], 0.5, 0.01);
     TH_ASSERT_NEAR(st.ir_pu[0], 4.0, 0.01);
-    /* Id = 2.0 pu, Ir = 4.0 pu: operates */
+    /* Id = 2.0 pu, Ir = 4.0 pu: operates on every phase */
     set_bay(i, 0, 3.0f * s.base_a, 0.0f);
     set_bay(i, 1, -1.0f * s.base_a, 0.0f);
-    TH_ASSERT(bus_diff_87b_step(&s, &st, i, 0u));
+    TH_ASSERT(feed_passes(&s, &st, i, SETTLE_PASSES, 0u));
     TH_ASSERT(st.operate[0] && st.operate[1] && st.operate[2]);
+    TH_ASSERT(st.op_phase == 0u);
 }
 
 static void test_invalid_blocks(void)
@@ -97,17 +131,23 @@ static void test_invalid_blocks(void)
     TH_CASE("T-87B-12 REQ-87B-027: any in-zone bay channel invalid blocks, nothing substituted");
     bus_diff_87b_settings_t s = ied_default_settings()->b87;
     bus_diff_87b_state_t st;
-    bus_diff_87b_init(&st);
+    bus_diff_87b_init(&st, 5.6f);
     cplx_t i[IED_NUM_BAYS][3];
     healthy_bus(i);
+    (void)feed_passes(&s, &st, i, SETTLE_PASSES, 0u);
+    TH_ASSERT(!st.blocked && !st.pickup[0]);
     set_bay(i, 3, 0.0f, 0.0f);   /* bay-4 CT open: its 240 A (0.26 pu) vanish from the sum */
-    TH_ASSERT(!bus_diff_87b_step(&s, &st, i, IED_CH_BIT(IED_CH_BAY_I(3, 1))));
+    TH_ASSERT(!feed_passes(&s, &st, i, SETTLE_PASSES, IED_CH_BIT(IED_CH_BAY_I(3, 1))));
     TH_ASSERT(st.blocked);
     TH_ASSERT(!st.operated && !st.pickup[0]);
     TH_ASSERT(st.id_pu[0] == 0.0f);
-    /* same data, channel valid: the element sees a real differential */
-    TH_ASSERT(bus_diff_87b_step(&s, &st, i, 0u) || st.pickup[0]);
+    /* channel valid again: one full window of arming, then the real differential shows */
+    (void)feed_passes(&s, &st, i, BUS_DIFF_87B_ARM_PASSES - 1u, 0u);
+    TH_ASSERT(st.blocked);
+    (void)feed_passes(&s, &st, i, 2u, 0u);
     TH_ASSERT(!st.blocked);
+    TH_ASSERT(st.pickup[0]);
+    TH_ASSERT_NEAR(st.id_pu[0], 240.0 / s.base_a, 0.005);
 }
 
 static void test_out_of_zone_bay(void)
@@ -116,10 +156,10 @@ static void test_out_of_zone_bay(void)
     bus_diff_87b_settings_t s = ied_default_settings()->b87;
     s.bay_in_zone[2] = 0u;
     bus_diff_87b_state_t st;
-    bus_diff_87b_init(&st);
+    bus_diff_87b_init(&st, 5.6f);
     cplx_t i[IED_NUM_BAYS][3];
     healthy_bus(i);
-    (void)bus_diff_87b_step(&s, &st, i, IED_BAY_MASK(2));
+    (void)feed_passes(&s, &st, i, SETTLE_PASSES, IED_BAY_MASK(2));
     TH_ASSERT(!st.blocked);
     TH_ASSERT_NEAR(st.id_pu[0], 180.0 / s.base_a, 0.005);          /* bay-3 load now looks differential */
     TH_ASSERT_NEAR(st.ir_pu[0], (320.0 + 740.0 + 240.0) / s.base_a, 0.005);
@@ -130,28 +170,26 @@ static void test_cts_alarm_blocks(void)
     TH_CASE("T-87B-10 REQ-87B-018 REQ-87B-019: standing 5 % differential under load alarms after 3 s and blocks");
     bus_diff_87b_settings_t s = ied_default_settings()->b87;
     bus_diff_87b_state_t st;
-    bus_diff_87b_init(&st);
+    bus_diff_87b_init(&st, 5.6f);
     cplx_t i[IED_NUM_BAYS][3];
     healthy_bus(i);
     /* bay-4 CT reads 10 % low: Id = 24 A = 0.026 pu, Ir ~ 1.57 pu -> 1.6 % : no alarm */
     set_bay(i, 3, -216.0f, 0.0f);
-    for (uint32_t k = 0; k < 2u * s.cts_delay_passes; k++) {
-        (void)bus_diff_87b_step(&s, &st, i, 0u);
-    }
+    (void)feed_passes(&s, &st, i, 2u * s.cts_delay_passes, 0u);
+    TH_ASSERT(!st.blocked);
     TH_ASSERT(!st.cts_alarm);
-    /* bay-4 CT reads 50 % low: Id = 120 A = 0.13 pu (< pickup 0.2), 8 % of Ir -> alarm */
+    /* bay-4 CT reads 50 % low: Id = 120 A = 0.13 pu (< pickup 0.2), 8 % of Ir -> alarm after the delay */
     set_bay(i, 3, -120.0f, 0.0f);
-    for (uint32_t k = 0; k < s.cts_delay_passes - 1u; k++) {
-        (void)bus_diff_87b_step(&s, &st, i, 0u);
-    }
+    (void)feed_passes(&s, &st, i, s.cts_delay_passes - BUS_DIFF_87B_ARM_PASSES, 0u);
     TH_ASSERT(!st.cts_alarm);
-    (void)bus_diff_87b_step(&s, &st, i, 0u);
+    (void)feed_passes(&s, &st, i, 2u * BUS_DIFF_87B_ARM_PASSES, 0u);
     TH_ASSERT(st.cts_alarm);
     TH_ASSERT(st.blocked);
     /* an internal fault while the alarm stands does not operate */
     set_bay(i, 1, 3000.0f, 0.0f);
-    TH_ASSERT(!bus_diff_87b_step(&s, &st, i, 0u));
+    TH_ASSERT(!feed_passes(&s, &st, i, SETTLE_PASSES, 0u));
     TH_ASSERT(!st.operated);
+    TH_ASSERT(st.blocked);
 }
 
 static void test_disabled(void)
