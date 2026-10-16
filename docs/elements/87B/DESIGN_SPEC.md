@@ -31,12 +31,15 @@ nothing is ever substituted for a missing current.
 | VT nominal | `VT_V_LN_NOMINAL` | V | defines Ib with `87B_BASE_MVA` (A1) |
 | DFT window state | `protection_pass()` arming (`hist` full) | | element not evaluated until the window is full (REQ-87B-028) |
 
-Bay-1 phasors are mimic-compensated by the existing chain; bays 2–4 are raw
-full-cycle DFT (Q1). Both are full-cycle filters with the same fundamental
-gain, so the differential of a through current carried by two bays of the
-same filter type cancels; the residual DC-offset error appears only on the
-fault-carrying bays and is bounded by the scenario and sweep evidence
-(REQ-87B-034).
+All twelve bay currents pass through the same mimic filter (one per channel,
+`mimic_bus[3][3]` added for bays 2–4, same X/R setting) before the sample
+history, and every bay phasor is mimic-compensated the same way. Identical
+linear filters make the differential of a through current exactly zero
+through the DC-offset transient (REQ-87B-034). An earlier draft used raw DFT
+for bays 2–4 and produced a false differential during the first cycle of
+external faults in the sweep; that design is withdrawn. Q1 is therefore
+closed for 87B: the mimic is applied to bays 2–4 in `ingest()` (protection
+task, not the ISR), nine `mimic_step` per sample.
 
 ## 3. Settings
 
@@ -143,7 +146,7 @@ blocked transition logged once; CTS alarm logged as an SOE event with detail
 | Drop-out | Id below T; ratio 1.0 on the comparator, no intentional hysteresis | §4 |
 | Seal-in | TRIPB latched by the existing 86B path | REQ-87B-017 |
 | CTS alarm delay | `87B_CTS_DELAY` +/- 1 pass | §4 |
-| Cycles per pass | 9 additional `phasor_full_cycle` (bays 2–4, 32-tap complex MAC each) plus ~200 cycles of element arithmetic; estimate +2 500 to +3 500 cycles on 6 447 before (budget 12 000) | measured in `realtime.json` after (REQ-87B-031) |
+| Cycles per pass | 9 additional `phasor_full_cycle` (bays 2–4, 32-tap complex MAC each), 9 `mimic_compensate`, 9 x 4 `mimic_step` per pass in `ingest()`, plus ~200 cycles of element arithmetic; estimate +2 500 to +4 000 cycles on 6 447 before (budget 12 000) | measured in `realtime.json` after (REQ-87B-031) |
 
 ## 8. Traceability
 
@@ -170,6 +173,11 @@ blocked transition logged once; CTS alarm logged as an SOE event with detail
 ## 9. Blast radius
 
 Files touched: `firmware/src/prot/bus_diff_87b.{h,c}` (new),
+`firmware/src/ied/event_recorder.{h,c}` (four appended SOE codes),
+`firmware/testset/testset.c` (Kirchhoff after the bay-1 breaker opens: the
+infeed no longer supplies bay 1 — before this fix the test set left a standing
+0.4 pu differential after every bay-1 trip, invisible to feeder elements but a
+false internal fault to 87B),
 `firmware/src/prot/trip_matrix.{h,c}` (append `ELEM_87B`, route to TRIP1 and
 TRIPB), `firmware/src/ied/ied_app.{h,c}` (settings struct, finalize, bay 2–4
 phasors, element call, SOE, operands), `firmware/src/ied/settings_file.c`
@@ -178,6 +186,10 @@ phasors, element call, SOE, operands), `firmware/src/ied/settings_file.c`
 (expected elements for `bus_fault_internal`), `tools/build_realtime_report.py`
 and `tools/run_renode.py` (element name table, expectation), `tool/` (87B page,
 settings model), tests and docs.
+
+Measurement chain: bays 2–4 samples are now mimic-filtered in `ingest()`;
+nothing else reads bays 2–4 from the history (PMU and all feeder elements use
+bay 1 and the VTs), and bay-1 / VT processing is unchanged.
 
 Elements affected: none of 50/51/21/81/50BF read anything 87B writes. The only
 behavioural change to an existing scenario is `bus_fault_internal`, which goes

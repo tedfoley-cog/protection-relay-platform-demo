@@ -30,7 +30,7 @@ SCENARIO_T0_SOC = 1790000003  # SOC_AT_BOOT + preroll in target/stm32f407/main.c
 FAULT_START_S = 0.30
 
 ELEMENTS = ["50P", "50G", "51P", "51G", "21Z1", "21Z2", "81U", "81O", "81R",
-            "50BF-RT", "50BF-86B"]
+            "50BF-RT", "50BF-86B", "87B"]
 
 # What a correct relay must do in each scenario.
 EXPECTED = {
@@ -46,8 +46,8 @@ EXPECTED = {
                         "elements": ["21Z1", "50BF-86B"], "bus_trip": True},
     "bus_fault_external": {"description": "B-C fault on the bay-3 feeder (external to the bus zone)",
                            "elements": [], "bus_trip": False},
-    "bus_fault_internal": {"description": "A-G fault on the bus (internal): no bus protection on this relay",
-                           "elements": [], "bus_trip": False},
+    "bus_fault_internal": {"description": "A-G fault on the bus (internal): 87B trips the bus through 86B",
+                           "elements": ["87B"], "bus_trip": True},
     "ct_lost_bay1_load": {"description": "Balanced load with the bay-1 CT circuit lost (inputs invalid)",
                           "elements": [], "bus_trip": False},
 }
@@ -119,7 +119,7 @@ def scenario_row(name: str, r: run_renode.RunResult) -> dict:
         if element == "50BF-RT" and expected["elements"]:
             continue
         observed.append(element)
-    if r.result.get("tripb") and "50BF-86B" not in observed:
+    if r.result.get("tripb") and "50BF-86B" not in observed and "87B" not in observed:
         observed.append("50BF-86B")
     trips = [e for e in r.events if e["code"] == "TRIP1"]
     clear_ms = None

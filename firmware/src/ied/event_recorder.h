@@ -20,7 +20,11 @@ typedef enum {
     SOE_PPS_LOST,
     SOE_TASK_OVERRUN,
     SOE_INPUT_INVALID,         /* detail: first invalid channel; elements on it blocked */
-    SOE_INPUT_VALID
+    SOE_INPUT_VALID,
+    SOE_ELEMENT_BLOCKED,       /* detail: element id; value 1 = CT supervision */
+    SOE_ELEMENT_UNBLOCKED,
+    SOE_CTS_ALARM,             /* detail: element id; value: Id pu */
+    SOE_CTS_ALARM_RESET
 } soe_code_t;
 
 typedef struct {

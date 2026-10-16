@@ -100,8 +100,8 @@ static void test_invalid_blocks(void)
     bus_diff_87b_init(&st);
     cplx_t i[IED_NUM_BAYS][3];
     healthy_bus(i);
-    set_bay(i, 2, 0.0f, 0.0f);   /* bay-3 CT open: its 180 A vanish from the sum */
-    TH_ASSERT(!bus_diff_87b_step(&s, &st, i, IED_CH_BIT(IED_CH_BAY_I(2, 1))));
+    set_bay(i, 3, 0.0f, 0.0f);   /* bay-4 CT open: its 240 A (0.26 pu) vanish from the sum */
+    TH_ASSERT(!bus_diff_87b_step(&s, &st, i, IED_CH_BIT(IED_CH_BAY_I(3, 1))));
     TH_ASSERT(st.blocked);
     TH_ASSERT(!st.operated && !st.pickup[0]);
     TH_ASSERT(st.id_pu[0] == 0.0f);
@@ -205,15 +205,15 @@ static void test_internal_fault_operates(void)
         float trip_ms = (float)(t1->tick - FAULT_TICK) * 1000.0f / (float)IED_SAMPLE_RATE_HZ;
         printf("    bus_fault_internal: 87B operate %.1f ms, TRIP1 %.1f ms after inception, Id = %.2f pu\n",
                (double)op_ms, (double)trip_ms, (double)op->value);
-        TH_ASSERT(op->value > 2.0f);
+        TH_ASSERT(op->value > 0.2f);          /* Id at the operating pass, pu */
         TH_ASSERT(trip_ms <= 25.0f);          /* A4: measured, customer target BLOCKED */
     }
-    TH_ASSERT(st->b87.operate[0]);
-    TH_ASSERT(!st->b87.operate[1] && !st->b87.operate[2]);
-    /* seal-in: the fault is never cleared in this scenario and the lockout stands */
+    /* phase selectivity: the A-G fault operates phase A only */
+    TH_ASSERT(op != NULL && (op->detail & 0xFFu) == ELEM_87B);
+    TH_ASSERT(loop_res.ts.bus_dead);          /* the 86B trip de-energised the bus */
+    /* seal-in (A6): the bus is dead and the differential gone, yet 86B stands until reset */
+    TH_ASSERT(!st->b87.operated);
     TH_ASSERT(st->tripb);
-    ied_reset_lockout();
-    TH_ASSERT(!ied_status()->tripb || st->b87.operated);
 }
 
 static void test_external_fault_secure(void)

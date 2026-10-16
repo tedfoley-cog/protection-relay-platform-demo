@@ -39,7 +39,7 @@ static void pin(const pin_t *p)
 }
 
 static const pin_t k_pins[] = {
-#include "characterization_table.inc"
+#include "characterization_table.h"
 };
 
 int main(void)

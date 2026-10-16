@@ -44,6 +44,14 @@ typedef enum {
     RULES_IN_BAY3_CT_SECONDARY_A,
     RULES_IN_BAY4_CT_PRIMARY_A,
     RULES_IN_BAY4_CT_SECONDARY_A,
+    RULES_IN_87B_BASE_MVA,
+    RULES_IN_87B_PICKUP_PU,
+    RULES_IN_87B_SLOPE1_PCT,
+    RULES_IN_87B_SLOPE2_PCT,
+    RULES_IN_87B_BREAKPOINT_PU,
+    RULES_IN_87B_CTS_ALARM_PCT,
+    RULES_IN_87B_CTS_DELAY_S,
+    RULES_IN_87B_BAYS_IN_ZONE,   /* number of bays set in zone, as float */
     RULES_IN_COUNT
 } rules_input_index_t;
 
@@ -67,6 +75,15 @@ typedef enum {
     RULE_VT_NOMINAL_RANGE,     /* R-VT-001 */
     RULE_CT_PRIMARY_RANGE,     /* R-CT-001 (detail = bay index) */
     RULE_CT_SECONDARY_VALUE,   /* R-CT-002 (detail = bay index) */
+    RULE_87B_PICKUP_RANGE,     /* R-87B-001 */
+    RULE_87B_SLOPE1_RANGE,     /* R-87B-002 */
+    RULE_87B_SLOPE2_RANGE,     /* R-87B-003 */
+    RULE_87B_BREAKPOINT_RANGE, /* R-87B-004 */
+    RULE_87B_SLOPE_ORDER,      /* R-87B-005 slope 2 >= slope 1 */
+    RULE_87B_CTS_PCT_RANGE,    /* R-87B-006 */
+    RULE_87B_CTS_DELAY_RANGE,  /* R-87B-007 */
+    RULE_87B_MIN_BAYS,         /* R-87B-008 at least two bays in zone */
+    RULE_87B_BASE_RANGE,       /* R-87B-009 */
     RULE_COUNT
 } rule_code_t;
 

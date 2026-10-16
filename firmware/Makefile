@@ -8,7 +8,7 @@ PLATFORM_SRCS = src/dnp3_outstation.c
 SHARED_SRCS = ../shared/relay_math/toc_curve.c ../shared/relay_math/pu_scale.c ../shared/relay_math/settings_rules.c
 IED_SRCS = src/dsp/phasor.c src/dsp/symcomp.c src/dsp/sample_history.c \
            src/prot/oc_element.c src/prot/distance.c src/prot/breaker_failure.c \
-           src/prot/freq_element.c src/prot/trip_matrix.c \
+           src/prot/freq_element.c src/prot/trip_matrix.c src/prot/bus_diff_87b.c \
            src/pmu/timebase.c src/pmu/synchrophasor.c src/pmu/c37118.c \
            src/rt/sample_ring.c src/rt/cycle_stats.c \
            src/ied/event_recorder.c src/ied/ied_app.c src/ied/settings_file.c
