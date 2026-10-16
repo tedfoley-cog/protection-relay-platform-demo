@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-16T14:13:29+00:00",
+  "generated_at": "2026-10-16T14:27:48+00:00",
   "label": "87b",
   "target": {
     "mcu": "STM32F407VG",
@@ -7,8 +7,8 @@
     "cpu_hz": 168000000,
     "emulator": "Renode 1.15.3",
     "resolution_cycles": 168,
-    "flash_bytes": 43084,
-    "ram_bytes": 21328,
+    "flash_bytes": 43260,
+    "ram_bytes": 21344,
     "method": "DWT cycle counter on the emulated core; instruction-accurate at 168 MIPS, no pipeline or flash wait-state model"
   },
   "rates": {
@@ -34,21 +34,21 @@
       "task": "protection",
       "rate_hz": 480,
       "budget_cycles": 12000,
-      "max_cycles": 11529,
-      "mean_cycles": 11069,
-      "max_us": 68.6,
-      "headroom_pct": 3.9,
-      "worst_scenario": "bus_fault_internal",
+      "max_cycles": 11592,
+      "mean_cycles": 11126,
+      "max_us": 69.0,
+      "headroom_pct": 3.4,
+      "worst_scenario": "fault_ag_zone1",
       "status": "within budget"
     },
     {
       "task": "pmu",
       "rate_hz": 60,
       "budget_cycles": 30000,
-      "max_cycles": 16884,
+      "max_cycles": 16863,
       "mean_cycles": 16694,
-      "max_us": 100.5,
-      "headroom_pct": 43.7,
+      "max_us": 100.4,
+      "headroom_pct": 43.8,
       "worst_scenario": "bus_fault_internal",
       "status": "within budget"
     },
@@ -90,7 +90,7 @@
       ],
       "bus_trip": false,
       "trip_ms": 14.1,
-      "util_pct": 5.2,
+      "util_pct": 5.24,
       "pass": true
     },
     {
@@ -134,7 +134,7 @@
       ],
       "bus_trip": true,
       "trip_ms": 14.1,
-      "util_pct": 5.2,
+      "util_pct": 5.24,
       "pass": true
     },
     {
