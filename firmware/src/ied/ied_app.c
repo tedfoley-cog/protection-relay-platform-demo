@@ -360,8 +360,11 @@ static void protection_pass(const sample_frame_t *f)
         if ((s_ied.matrix.rising & ELEM_BIT(ELEM_87B)) != 0u) {
             record(SOE_ELEMENT_OPERATE, ELEM_87B, s_ied.b87.id_pu[s_ied.b87.op_phase]);
         }
+        /* TRIP1 events carry the feeder current in A on the normal path; bay 1
+         * is invalid here, so no current value is recorded (0 = not available),
+         * never a substitute. The 87B Id is on its OPERATE/TRIPB events. */
         if (s_ied.matrix.trip1 && !trip1_was) {
-            record(SOE_TRIP1_ON, (uint16_t)s_ied.matrix.target, s_ied.b87.id_pu[s_ied.b87.op_phase]);
+            record(SOE_TRIP1_ON, (uint16_t)s_ied.matrix.target, 0.0f);
         } else if (!s_ied.matrix.trip1 && trip1_was) {
             record(SOE_TRIP1_OFF, 0u, 0.0f);
         }
