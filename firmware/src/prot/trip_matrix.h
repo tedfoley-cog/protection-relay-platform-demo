@@ -26,6 +26,7 @@ typedef enum {
     ELEM_81R,
     ELEM_50BF_RETRIP,
     ELEM_50BF_BUS,
+    ELEM_87B,
     ELEM_COUNT
 } elem_id_t;
 

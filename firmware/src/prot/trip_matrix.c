@@ -3,7 +3,7 @@
 #include <stddef.h>
 
 static const char *const k_elem_names[ELEM_COUNT] = {
-    "50P", "50G", "51P", "51G", "21Z1", "21Z2", "81U", "81O", "81R", "50BF-RT", "50BF-86B",
+    "50P", "50G", "51P", "51G", "21Z1", "21Z2", "81U", "81O", "81R", "50BF-RT", "50BF-86B", "87B",
 };
 
 const char *elem_name(elem_id_t e)

@@ -20,7 +20,7 @@ enum {
 };
 enum {
     BI_TRIP1 = 0, BI_86B, BI_52B, BI_21Z1, BI_21Z2, BI_51P, BI_51G, BI_50BF,
-    BI_81U, BI_81O, BI_81R, BI_PPS_LOCK, BI_COUNT
+    BI_81U, BI_81O, BI_81R, BI_PPS_LOCK, BI_87B, BI_COUNT
 };
 
 typedef struct {
@@ -30,6 +30,7 @@ typedef struct {
     sample_ring_t ring;
     sample_history_t hist;
     mimic_filter_t mimic[4];   /* IA IB IC IN */
+    int8_t b87_sign[IED_NUM_BAYS];   /* +1: measured positive current flows into the bus */
 
     ioc_state_t i50p;
     ioc_state_t i50g;
@@ -38,6 +39,7 @@ typedef struct {
     distance_state_t dist;
     bf_state_t bf;
     freq_state_t freq;
+    bus_diff_87b_state_t b87;
     trip_matrix_state_t matrix;
     volatile elem_mask_t freq_mask;
     volatile uint32_t fault_block_until;  /* tick; frequency elements blocked before it */
@@ -99,12 +101,25 @@ static const ied_settings_t k_default_settings = {
         .rocof_pickup_hz_s = 1.5f, .rocof_frames = 2u,
         .uv_inhibit_pu = 0.5f,
     },
+    .b87 = {
+        /* Prototype values under REQUIREMENTS.md assumptions A1 (base) and
+         * A3 (slope order); customer defaults 60/25 are BLOCKED. */
+        .enabled = 1u,
+        .base_mva = 20.0f,
+        .pickup_pu = 0.20f,
+        .slope1_pct = 25.0f,
+        .slope2_pct = 60.0f,
+        .breakpoint_pu = 2.0f,
+        .cts_alarm_pct = 5.0f,
+        .cts_delay_s = 3.0f,
+        .bay_in_zone = {1u, 1u, 1u, 1u},
+    },
     .matrix = {
         .trip1_mask = ELEM_BIT(ELEM_50P) | ELEM_BIT(ELEM_50G) | ELEM_BIT(ELEM_51P) |
                       ELEM_BIT(ELEM_51G) | ELEM_BIT(ELEM_21Z1) | ELEM_BIT(ELEM_21Z2) |
                       ELEM_BIT(ELEM_81U) | ELEM_BIT(ELEM_81O) | ELEM_BIT(ELEM_81R) |
-                      ELEM_BIT(ELEM_50BF_RETRIP),
-        .tripb_mask = ELEM_BIT(ELEM_50BF_BUS),
+                      ELEM_BIT(ELEM_50BF_RETRIP) | ELEM_BIT(ELEM_87B),
+        .tripb_mask = ELEM_BIT(ELEM_50BF_BUS) | ELEM_BIT(ELEM_87B),
     },
     .pmu_idcode = 4107u,
     .station = "BUS1 FDR1 RELAY",
@@ -118,7 +133,7 @@ static const char *const k_phasor_names[IED_PMU_NUM_PHASORS] = {
 static const uint8_t k_phasor_is_current[IED_PMU_NUM_PHASORS] = {0, 0, 0, 1, 1, 1, 1, 0, 1};
 static const char *const k_digital_names[16] = {
     "TRIP1", "86B", "21Z1", "51", "50BF", "81U", "81O", "81R",
-    "52B", "PPS_LOCK", "", "", "", "", "", "",
+    "52B", "PPS_LOCK", "87B", "", "", "", "", "",
 };
 
 static const ied_channel_t k_mimic_ch[4] = {IED_CH_IA, IED_CH_IB, IED_CH_IC, IED_CH_IN};
@@ -147,6 +162,9 @@ void ied_settings_finalize(ied_settings_t *s)
         }
     }
     s->scale[IED_CH_IN] = s->scale[IED_CH_IA];
+    float kv_ll = s->v_ln_nominal * 1.7320508f / 1000.0f;
+    s->b87.base_a = pu_base_a_from_mva(s->b87.base_mva, kv_ll);
+    s->b87.cts_delay_passes = (uint32_t)(s->b87.cts_delay_s * (float)IED_PROT_RATE_HZ + 0.5f);
 }
 
 static uint32_t disconnected_mask(const ied_settings_t *s)
@@ -184,6 +202,9 @@ void ied_init(const ied_settings_t *s, uint32_t soc_at_boot, const ied_hooks_t *
     for (int k = 0; k < 4; k++) {
         mimic_init(&s_ied.mimic[k], s_ied.s->x_over_r);
     }
+    for (uint32_t bay = 0; bay < IED_NUM_BAYS; bay++) {
+        s_ied.b87_sign[bay] = s_ied.s->bay[bay].polarity == BAY_POLARITY_TOWARD_BUS ? 1 : -1;
+    }
     ioc_init(&s_ied.i50p);
     ioc_init(&s_ied.i50g);
     toc_init(&s_ied.t51p);
@@ -191,6 +212,7 @@ void ied_init(const ied_settings_t *s, uint32_t soc_at_boot, const ied_hooks_t *
     distance_init(&s_ied.dist);
     bf_init(&s_ied.bf);
     freq_init(&s_ied.freq);
+    bus_diff_87b_init(&s_ied.b87, s_ied.s->x_over_r);
     trip_matrix_init(&s_ied.matrix);
     pmu_estimator_init(&s_ied.pmu);
     soe_init(&s_ied.soe);
@@ -263,6 +285,16 @@ static void ingest(const sample_frame_t *f)
     for (uint32_t ch = 0; ch < (uint32_t)IED_NUM_CHANNELS; ch++) {
         value[ch] = (float)f->raw[ch] * s_ied.s->scale[ch];
     }
+    /* 87B sees every bay's raw sample of this frame (REQ-87B-003) before the
+     * bay-1 mimic; it filters the differential itself. */
+    float bay_a[IED_NUM_BAYS][IED_PHASES];
+    for (uint32_t bay = 0; bay < IED_NUM_BAYS; bay++) {
+        for (uint32_t ph = 0; ph < IED_PHASES; ph++) {
+            bay_a[bay][ph] = value[IED_CH_BAY_I(bay, ph)];
+        }
+    }
+    bus_diff_87b_ingest(&s_ied.s->b87, &s_ied.b87, bay_a, s_ied.b87_sign, f->sample_in_second,
+                        f->invalid_mask);
     for (uint32_t k = 0; k < 4u; k++) {
         value[k_mimic_ch[k]] = mimic_step(&s_ied.mimic[k], value[k_mimic_ch[k]]);
     }
@@ -301,12 +333,48 @@ static void protection_pass(const sample_frame_t *f)
     float iph[3] = {cplx_abs(i[0]), cplx_abs(i[1]), cplx_abs(i[2])};
     float imax = fmaxf(iph[0], fmaxf(iph[1], iph[2]));
 
+    /* 87B decides on the samples it ingested for this frame; it blocks itself
+     * on any invalid in-zone channel, so it runs before the bay-1 hold below. */
     elem_mask_t op = 0u;
+    if (bus_diff_87b_step(&s->b87, &s_ied.b87, f->invalid_mask)) {
+        op |= ELEM_BIT(ELEM_87B);
+    }
+    if (s_ied.b87.blocked != st->b87.blocked && s_ied.b87.enabled) {
+        record(s_ied.b87.blocked ? SOE_ELEMENT_BLOCKED : SOE_ELEMENT_UNBLOCKED, ELEM_87B,
+               s_ied.b87.cts_alarm ? 1.0f : 0.0f);
+    }
+    if (s_ied.b87.cts_alarm != st->b87.cts_alarm) {
+        record(s_ied.b87.cts_alarm ? SOE_CTS_ALARM : SOE_CTS_ALARM_RESET, ELEM_87B,
+               s_ied.b87.id_pu[0]);
+    }
+    st->b87 = s_ied.b87;
+
     if ((f->invalid_mask & BAY1_INPUT_MASK) != 0u) {
         /* Bay-1 CT data missing or invalid: hold every element that reads it.
-         * Frequency elements run on the VTs and are unaffected. */
+         * Frequency elements run on the VTs and are unaffected; 87B has
+         * already blocked itself unless bay 1 is out of its zone. */
         op |= s_ied.freq_mask;
+        bool tripb_was = s_ied.matrix.tripb;
+        bool trip1_was = s_ied.matrix.trip1;
         trip_matrix_step(&s->matrix, &s_ied.matrix, op, s_ied.breaker_open, false);
+        if ((s_ied.matrix.rising & ELEM_BIT(ELEM_87B)) != 0u) {
+            record(SOE_ELEMENT_OPERATE, ELEM_87B, s_ied.b87.id_pu[s_ied.b87.op_phase]);
+        }
+        /* TRIP1 events carry the feeder current in A on the normal path; bay 1
+         * is invalid here, so no current value is recorded (0 = not available),
+         * never a substitute. The 87B Id is on its OPERATE/TRIPB events. */
+        if (s_ied.matrix.trip1 && !trip1_was) {
+            record(SOE_TRIP1_ON, (uint16_t)s_ied.matrix.target, 0.0f);
+        } else if (!s_ied.matrix.trip1 && trip1_was) {
+            record(SOE_TRIP1_OFF, 0u, 0.0f);
+        }
+        if (s_ied.matrix.tripb && !tripb_was) {
+            record(SOE_TRIPB_ON, ELEM_87B, s_ied.b87.id_pu[s_ied.b87.op_phase]);
+        }
+        st->trip1 = s_ied.matrix.trip1;
+        st->tripb = s_ied.matrix.tripb;
+        st->operated = s_ied.matrix.operated;
+        st->target = s_ied.matrix.target;
         st->invalid_mask = f->invalid_mask;
         st->blocked_passes++;
         st->protection_passes++;
@@ -366,6 +434,8 @@ static void protection_pass(const sample_frame_t *f)
                 value = in_a;
             } else if (e == ELEM_50BF_RETRIP || e == ELEM_50BF_BUS) {
                 value = s_ied.bf.elapsed_s;
+            } else if (e == ELEM_87B) {
+                value = s_ied.b87.id_pu[s_ied.b87.op_phase];
             } else if (e >= ELEM_81U && e <= ELEM_81R) {
                 value = e == ELEM_81R ? st->rocof_hz_s : st->freq_hz;
             }
@@ -383,7 +453,11 @@ static void protection_pass(const sample_frame_t *f)
         record(SOE_TRIP1_OFF, 0u, imax);
     }
     if (s_ied.matrix.tripb && !tripb_before) {
-        record(SOE_TRIPB_ON, ELEM_50BF_BUS, s_ied.bf.elapsed_s);
+        if ((op & ELEM_BIT(ELEM_87B)) != 0u) {
+            record(SOE_TRIPB_ON, ELEM_87B, s_ied.b87.id_pu[s_ied.b87.op_phase]);
+        } else {
+            record(SOE_TRIPB_ON, ELEM_50BF_BUS, s_ied.bf.elapsed_s);
+        }
     }
     if (breaker_open != s_ied.breaker_open_seen) {
         record(breaker_open ? SOE_BREAKER_OPEN : SOE_BREAKER_CLOSED, 0u, imax);
@@ -453,6 +527,7 @@ static uint16_t digital_word(void)
     d |= s_ied.freq.rocof_operated ? 0x0080u : 0u;
     d |= s_ied.breaker_open ? 0x0100u : 0u;
     d |= g_timebase.pps_locked ? 0x0200u : 0u;
+    d |= s_ied.b87.operated ? 0x0400u : 0u;
     return d;
 }
 
@@ -557,6 +632,7 @@ void ied_comms_task(void)
     dnp3_set_binary(&s_ied.dnp3, BI_81O, s_ied.freq.of_operated, online);
     dnp3_set_binary(&s_ied.dnp3, BI_81R, s_ied.freq.rocof_operated, online);
     dnp3_set_binary(&s_ied.dnp3, BI_PPS_LOCK, g_timebase.pps_locked, online);
+    dnp3_set_binary(&s_ied.dnp3, BI_87B, st->b87.operated, online);
     (void)dnp3_encode_class0(&s_ied.dnp3, s_ied.dnp3_buf, sizeof(s_ied.dnp3_buf));
 
     soe_event_t ev;

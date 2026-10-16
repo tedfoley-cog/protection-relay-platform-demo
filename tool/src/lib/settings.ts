@@ -44,6 +44,15 @@ export interface Settings {
   f81oPickupHz: number;
   f81rPickupHzS: number;
   f81UvInhibitPu: number;
+  b87Function: "ENABLED" | "DISABLED";
+  b87BaseMva: number;
+  b87PickupPu: number;
+  b87Slope1Pct: number;
+  b87Slope2Pct: number;
+  b87BreakpointPu: number;
+  b87CtsAlarmPct: number;
+  b87CtsDelayS: number;
+  b87BayInZone: boolean[];
   bays: Bay[];
 }
 
@@ -77,6 +86,17 @@ export const DEFAULT_SETTINGS: Settings = {
   f81oPickupHz: 60.5,
   f81rPickupHzS: 1.0,
   f81UvInhibitPu: 0.6,
+  /* 87B prototype values: slope order and base are BLOCKED rows in
+   * docs/elements/87B/REQUIREMENTS.md (assumptions A1, A3). */
+  b87Function: "ENABLED",
+  b87BaseMva: 20,
+  b87PickupPu: 0.2,
+  b87Slope1Pct: 25,
+  b87Slope2Pct: 60,
+  b87BreakpointPu: 2.0,
+  b87CtsAlarmPct: 5,
+  b87CtsDelayS: 3.0,
+  b87BayInZone: [true, true, true, true],
   bays: [
     { name: "Feeder 1", role: "FEEDER", ctPrimaryA: 1200, ctSecondaryA: 5, polarity: "LINE", ctConnected: true },
     { name: "Transformer T1", role: "INFEED", ctPrimaryA: 2000, ctSecondaryA: 5, polarity: "BUS", ctConnected: true },
@@ -85,7 +105,7 @@ export const DEFAULT_SETTINGS: Settings = {
   ],
 };
 
-type NumKey = Exclude<keyof Settings, "bays" | "t51pCurve" | "t51gCurve">;
+type NumKey = Exclude<keyof Settings, "bays" | "t51pCurve" | "t51gCurve" | "b87Function" | "b87BayInZone">;
 
 const FILE_KEYS: Array<[string, keyof Settings]> = [
   ["VT_V_LN_NOMINAL", "vtVLnNominal"],
@@ -116,6 +136,14 @@ const FILE_KEYS: Array<[string, keyof Settings]> = [
   ["81O_PICKUP_HZ", "f81oPickupHz"],
   ["81R_PICKUP_HZ_S", "f81rPickupHzS"],
   ["81_UV_INHIBIT_PU", "f81UvInhibitPu"],
+  ["87B_FUNCTION", "b87Function"],
+  ["87B_BASE_MVA", "b87BaseMva"],
+  ["87B_PICKUP", "b87PickupPu"],
+  ["87B_SLOPE1", "b87Slope1Pct"],
+  ["87B_SLOPE2", "b87Slope2Pct"],
+  ["87B_BREAKPOINT", "b87BreakpointPu"],
+  ["87B_CTS_ALARM_PCT", "b87CtsAlarmPct"],
+  ["87B_CTS_DELAY", "b87CtsDelayS"],
 ];
 
 export function toSettingsFile(s: Settings): string {
@@ -128,6 +156,7 @@ export function toSettingsFile(s: Settings): string {
     lines.push(`BAY${n}_POLARITY = ${b.polarity}`);
     lines.push(`BAY${n}_CT_CONNECTED = ${b.ctConnected ? "YES" : "NO"}`);
   });
+  s.b87BayInZone.forEach((z, k) => lines.push(`87B_BAY${k + 1}_IN_ZONE = ${z ? "YES" : "NO"}`));
   return lines.join("\n") + "\n";
 }
 
@@ -145,6 +174,15 @@ export function parseSettingsFile(text: string, base: Settings): { settings: Set
     }
     const key = line.slice(0, eq).trim();
     const value = line.slice(eq + 1).trim();
+    const zone = /^87B_BAY([1-4])_IN_ZONE$/.exec(key);
+    if (zone) {
+      if (value !== "YES" && value !== "NO") errors.push(`line ${idx + 1}: ${key} must be YES or NO`);
+      else {
+        s.b87BayInZone = [...s.b87BayInZone];
+        s.b87BayInZone[Number(zone[1]) - 1] = value === "YES";
+      }
+      return;
+    }
     const bay = /^BAY([1-4])_(CT_PRIMARY_A|CT_SECONDARY_A|POLARITY|CT_CONNECTED)$/.exec(key);
     if (bay) {
       const b = s.bays[Number(bay[1]) - 1];
@@ -190,6 +228,8 @@ export function rulesInput(s: Settings, rm: RelayMath): Float32Array {
     s.f81uPickupHz, s.f81oPickupHz, s.f81rPickupHzS,
     s.vtVLnNominal,
     ...s.bays.flatMap((b) => [b.ctPrimaryA, b.ctSecondaryA]),
+    s.b87BaseMva, s.b87PickupPu, s.b87Slope1Pct, s.b87Slope2Pct, s.b87BreakpointPu,
+    s.b87CtsAlarmPct, s.b87CtsDelayS, s.b87BayInZone.filter(Boolean).length,
   ];
   vals.forEach((x, k) => (v[k] = x));
   return v;
@@ -198,7 +238,7 @@ export function rulesInput(s: Settings, rm: RelayMath): Float32Array {
 /* Attribute each violation to the field(s) that cause it, using the shared
  * math only: a candidate field is a culprit when resetting it to its default
  * makes the violation disappear. Ordering rules (R-21-003) keep both fields. */
-const RELATIONAL_RULES = new Set(["R-21-003", "R-BF-002", "R-81-001"]);
+const RELATIONAL_RULES = new Set(["R-21-003", "R-BF-002", "R-81-001", "R-87B-005"]);
 
 export function checkSettings(s: Settings, rm: RelayMath): Violation[] {
   const found = rm.rulesCheck(rulesInput(s, rm));
@@ -233,6 +273,15 @@ export const RULE_FIELDS: Record<string, string[]> = {
   "R-VT-001": ["vtVLnNominal"],
   "R-CT-001": ["ctPrimaryA"],
   "R-CT-002": ["ctSecondaryA"],
+  "R-87B-001": ["b87PickupPu"],
+  "R-87B-002": ["b87Slope1Pct"],
+  "R-87B-003": ["b87Slope2Pct"],
+  "R-87B-004": ["b87BreakpointPu"],
+  "R-87B-005": ["b87Slope1Pct", "b87Slope2Pct"],
+  "R-87B-006": ["b87CtsAlarmPct"],
+  "R-87B-007": ["b87CtsDelayS"],
+  "R-87B-008": ["b87BayInZone"],
+  "R-87B-009": ["b87BaseMva"],
 };
 
 export const SECTION_OF_RULE = (id: string): string => {
@@ -240,5 +289,6 @@ export const SECTION_OF_RULE = (id: string): string => {
   if (id.startsWith("R-21")) return "distance";
   if (id.startsWith("R-BF")) return "breaker-failure";
   if (id.startsWith("R-81")) return "frequency";
+  if (id.startsWith("R-87B")) return "bus-diff";
   return "bays";
 };

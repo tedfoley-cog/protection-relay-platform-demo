@@ -47,6 +47,7 @@ int main(void)
         6000.0f, 6000.0f, 80.0f, 120.0f, 0.30f, 200.0f, 240.0f, 0.020f, 0.150f,
         59.3f, 60.5f, 1.5f, 7200.0f,
         1200.0f, 5.0f, 2000.0f, 5.0f, 600.0f, 5.0f, 800.0f, 5.0f,
+        20.0f, 0.20f, 25.0f, 60.0f, 2.0f, 5.0f, 3.0f, 4.0f,
     };
     struct { int index; float value; const char *expect; } cases[] = {
         {-1, 0.0f, ""},
@@ -60,6 +61,9 @@ int main(void)
         {RULES_IN_BAY3_CT_PRIMARY_A, 0.0f, "R-CT-001"},
         {RULES_IN_BAY4_CT_SECONDARY_A, 2.0f, "R-CT-002"},
         {RULES_IN_50P_PICKUP_A, 500.0f, "R-50-001"},
+        {RULES_IN_87B_PICKUP_PU, 0.04f, "R-87B-001"},
+        {RULES_IN_87B_SLOPE2_PCT, 20.0f, "R-87B-005"},
+        {RULES_IN_87B_BAYS_IN_ZONE, 1.0f, "R-87B-008"},
     };
     printf("  \"rules\": [\n");
     for (unsigned k = 0; k < sizeof(cases) / sizeof(cases[0]); k++) {

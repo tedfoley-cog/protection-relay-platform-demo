@@ -63,7 +63,7 @@ static const scenario_t k_scenarios[] = {
     {
         .name = "bus_fault_internal",
         .description = "A-G fault on the bus through 0.2 ohm; internal to the bus zone, "
-                       "uncleared: no element on this relay protects the bus",
+                       "cleared only by the 87B bus differential through 86B",
         .duration_s = 1.0f, .freq_hz = 60.0f, .freq_end_hz = 60.0f,
         .load_a = 320.0f, .load_pf = 0.95f,
         .fault = FAULT_AG, .fault_start_s = 0.30f, .fault_location_pct = 0.0f,
@@ -381,16 +381,23 @@ void testset_step(testset_t *ts, bool trip1, bool tripb, int16_t raw[IED_NUM_CHA
     }
 
     float sum_bay1 = 0.0f;
+    float bay1_dropped[3] = {0.0f, 0.0f, 0.0f};   /* bay-1 current removed by its open breaker */
     for (uint32_t bay = 0; bay < IED_NUM_BAYS; bay++) {
         const cplx_t *i = ts->fault_active ? ts->i_flt[bay] : ts->i_pre[bay];
         for (int ph = 0; ph < 3; ph++) {
             float ii = 0.0f;
-            bool open = ts->bus_dead || (bay == 0u && ts->breaker_open);
-            if (!open) {
+            if (!ts->bus_dead) {
                 ii = inst(i[ph], theta);
                 if (ts->fault_active) {
                     /* Current cannot change instantaneously at inception. */
                     ii -= ts->dc_offset[bay][ph] * decay;
+                }
+                if (bay == 0u && ts->breaker_open) {
+                    bay1_dropped[ph] = ii;
+                    ii = 0.0f;
+                } else if (k_bays[bay].role == BAY_ROLE_INFEED) {
+                    /* Kirchhoff at the bus: the infeed no longer supplies bay 1. */
+                    ii += bay1_dropped[ph];
                 }
             }
             if (bay == 0u) {

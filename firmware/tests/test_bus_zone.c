@@ -1,6 +1,6 @@
 /* Four-bay measurement chain: the test set obeys Kirchhoff at the bus for
- * every scenario and the relay's bay table matches the plant. No element
- * reads bays 2-4 yet; these tests pin the substrate a bus element will use. */
+ * every scenario and the relay's bay table matches the plant. These tests pin
+ * the substrate the 87B bus element reads. */
 #include "test_harness.h"
 #include "ied_loop.h"
 
@@ -74,13 +74,12 @@ static void test_bay_table_matches_plant(void)
     TH_ASSERT_NEAR(s->scale[IED_CH_B2_IA], 2000.0 / 1200.0, 1e-6);
 }
 
-static void test_no_element_operates_on_bus_fault(void)
+static void test_only_87b_operates_on_bus_fault(void)
 {
-    TH_CASE("no element on main operates for an internal bus fault (87B absent)");
+    TH_CASE("only 87B operates for an internal bus fault; no feeder element reaches the bus");
     const ied_status_t *st = loop_run(testset_find("bus_fault_internal"), 0u);
-    TH_ASSERT(!st->trip1);
-    TH_ASSERT(!st->tripb);
-    TH_ASSERT(st->operated == 0u);
+    TH_ASSERT(st->tripb);
+    TH_ASSERT((st->target & ~ELEM_BIT(ELEM_87B)) == 0u);
 }
 
 int main(void)
@@ -89,6 +88,6 @@ int main(void)
     test_internal_kcl();
     test_feeder_fault_is_external();
     test_bay_table_matches_plant();
-    test_no_element_operates_on_bus_fault();
+    test_only_87b_operates_on_bus_fault();
     return th_report("bus_zone");
 }

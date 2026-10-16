@@ -31,7 +31,7 @@ static bool parse_float(const char *v, float *out)
     return true;
 }
 
-typedef enum { K_FLOAT, K_TICKS_S, K_CURVE, K_POLARITY, K_U8, K_CONNECTED } key_kind_t;
+typedef enum { K_FLOAT, K_TICKS_S, K_CURVE, K_POLARITY, K_U8, K_CONNECTED, K_FUNCTION, K_YESNO } key_kind_t;
 
 typedef struct {
     const char *key;
@@ -86,6 +86,18 @@ static const key_def_t k_keys[] = {
     {"BAY4_CT_SECONDARY_A", K_FLOAT, OFF(bay[3].ct_secondary_a)},
     {"BAY4_POLARITY", K_POLARITY, OFF(bay[3].polarity)},
     {"BAY4_CT_CONNECTED", K_CONNECTED, OFF(bay[3].ct_connected)},
+    {"87B_FUNCTION", K_FUNCTION, OFF(b87.enabled)},
+    {"87B_BASE_MVA", K_FLOAT, OFF(b87.base_mva)},
+    {"87B_PICKUP", K_FLOAT, OFF(b87.pickup_pu)},
+    {"87B_SLOPE1", K_FLOAT, OFF(b87.slope1_pct)},
+    {"87B_SLOPE2", K_FLOAT, OFF(b87.slope2_pct)},
+    {"87B_BREAKPOINT", K_FLOAT, OFF(b87.breakpoint_pu)},
+    {"87B_CTS_ALARM_PCT", K_FLOAT, OFF(b87.cts_alarm_pct)},
+    {"87B_CTS_DELAY", K_FLOAT, OFF(b87.cts_delay_s)},
+    {"87B_BAY1_IN_ZONE", K_YESNO, OFF(b87.bay_in_zone[0])},
+    {"87B_BAY2_IN_ZONE", K_YESNO, OFF(b87.bay_in_zone[1])},
+    {"87B_BAY3_IN_ZONE", K_YESNO, OFF(b87.bay_in_zone[2])},
+    {"87B_BAY4_IN_ZONE", K_YESNO, OFF(b87.bay_in_zone[3])},
 };
 #define NUM_KEYS (sizeof(k_keys) / sizeof(k_keys[0]))
 
@@ -140,12 +152,23 @@ bool settings_file_assign(const char *key, const char *value, ied_settings_t *s,
             }
             return true;
         case K_CONNECTED:
+        case K_YESNO:
             if (strcmp(value, "YES") == 0) {
                 *(uint8_t *)field = 1u;
             } else if (strcmp(value, "NO") == 0) {
                 *(uint8_t *)field = 0u;
             } else {
-                add_error(res, line, key, "CT_CONNECTED must be YES or NO");
+                add_error(res, line, key, "value must be YES or NO");
+                return false;
+            }
+            return true;
+        case K_FUNCTION:
+            if (strcmp(value, "ENABLED") == 0) {
+                *(uint8_t *)field = 1u;
+            } else if (strcmp(value, "DISABLED") == 0) {
+                *(uint8_t *)field = 0u;
+            } else {
+                add_error(res, line, key, "function must be ENABLED or DISABLED");
                 return false;
             }
             return true;
@@ -182,6 +205,18 @@ void settings_rules_input(const ied_settings_t *s, float out[RULES_IN_COUNT])
         out[RULES_IN_BAY1_CT_PRIMARY_A + 2 * bay] = s->bay[bay].ct_primary_a;
         out[RULES_IN_BAY1_CT_SECONDARY_A + 2 * bay] = s->bay[bay].ct_secondary_a;
     }
+    out[RULES_IN_87B_BASE_MVA] = s->b87.base_mva;
+    out[RULES_IN_87B_PICKUP_PU] = s->b87.pickup_pu;
+    out[RULES_IN_87B_SLOPE1_PCT] = s->b87.slope1_pct;
+    out[RULES_IN_87B_SLOPE2_PCT] = s->b87.slope2_pct;
+    out[RULES_IN_87B_BREAKPOINT_PU] = s->b87.breakpoint_pu;
+    out[RULES_IN_87B_CTS_ALARM_PCT] = s->b87.cts_alarm_pct;
+    out[RULES_IN_87B_CTS_DELAY_S] = s->b87.cts_delay_s;
+    float in_zone = 0.0f;
+    for (uint32_t bay = 0; bay < IED_NUM_BAYS; bay++) {
+        in_zone += s->b87.bay_in_zone[bay] != 0u ? 1.0f : 0.0f;
+    }
+    out[RULES_IN_87B_BAYS_IN_ZONE] = in_zone;
 }
 
 int settings_file_check(const ied_settings_t *s, settings_result_t *res)
@@ -305,7 +340,11 @@ size_t settings_file_write(const ied_settings_t *s, char *buf, size_t len)
                      *(const bay_polarity_t *)field == BAY_POLARITY_TOWARD_BUS ? "BUS" : "LINE");
             break;
         case K_CONNECTED:
+        case K_YESNO:
             snprintf(val, sizeof(val), "%s", *(const uint8_t *)field ? "YES" : "NO");
+            break;
+        case K_FUNCTION:
+            snprintf(val, sizeof(val), "%s", *(const uint8_t *)field ? "ENABLED" : "DISABLED");
             break;
         }
         n += (size_t)snprintf(buf + n, len > n ? len - n : 0, "%s = %s\n", k_keys[k].key, val);

@@ -58,7 +58,7 @@ static void test_unknown_key_and_bad_curve(void)
     TH_CASE("unknown keys and unknown curve names reject the write");
     ied_settings_t out;
     settings_result_t res;
-    TH_ASSERT(!settings_file_parse("87B_SLOPE1 = 0.3\n", ied_default_settings(), &out, &res));
+    TH_ASSERT(!settings_file_parse("99X_NOT_A_KEY = 0.3\n", ied_default_settings(), &out, &res));
     TH_ASSERT(res.err[0].line == 1);
     TH_ASSERT(!settings_file_parse("51P_CURVE = IEC_WEIRD\n", ied_default_settings(), &out, &res));
 }
@@ -75,8 +75,67 @@ static void test_ct_rules(void)
     TH_ASSERT(has_rule(&res, "BAY4"));
 }
 
+/* 87B shared rules R-87B-001..009 through the firmware parser.
+ * VALIDATION_PLAN T-87B-R01..R09, T-87B-15; REQ-87B-008 REQ-87B-009 REQ-87B-010
+ * REQ-87B-011 REQ-87B-012 REQ-87B-022 REQ-87B-025 REQ-87B-026 REQ-87B-029 REQ-87B-030. */
+static void expect_rule(const char *text, const char *rule)
+{
+    ied_settings_t out;
+    settings_result_t res;
+    memset(&out, 0, sizeof(out));
+    bool ok = settings_file_parse(text, ied_default_settings(), &out, &res);
+    TH_ASSERT(!ok);
+    TH_ASSERT(has_rule(&res, rule));
+    TH_ASSERT(out.b87.pickup_pu == 0.0f);   /* rejected group leaves the target untouched */
+}
+
+static void test_87b_rules(void)
+{
+    TH_CASE("87B settings outside their ranges or with slope 2 below slope 1 are rejected");
+    expect_rule("87B_PICKUP = 0.04\n", "R-87B-001");
+    expect_rule("87B_PICKUP = 2.1\n", "R-87B-001");
+    expect_rule("87B_SLOPE1 = 5\n", "R-87B-002");
+    expect_rule("87B_SLOPE2 = 101\n", "R-87B-003");
+    expect_rule("87B_BREAKPOINT = 0.9\n", "R-87B-004");
+    expect_rule("87B_BREAKPOINT = 10.1\n", "R-87B-004");
+    expect_rule("87B_SLOPE1 = 60\n87B_SLOPE2 = 25\n", "R-87B-005");   /* customer defaults, BLOCKED row */
+    expect_rule("87B_CTS_ALARM_PCT = 1\n", "R-87B-006");
+    expect_rule("87B_CTS_ALARM_PCT = 21\n", "R-87B-006");
+    expect_rule("87B_CTS_DELAY = 0.4\n", "R-87B-007");
+    expect_rule("87B_CTS_DELAY = 11\n", "R-87B-007");
+    expect_rule("87B_BAY2_IN_ZONE = NO\n87B_BAY3_IN_ZONE = NO\n87B_BAY4_IN_ZONE = NO\n", "R-87B-008");
+    expect_rule("87B_BASE_MVA = 0.5\n", "R-87B-009");
+    expect_rule("87B_BASE_MVA = 1001\n", "R-87B-009");
+}
+
+static void test_87b_keys_round_trip(void)
+{
+    TH_CASE("87B keys parse, write back and validate as a group");
+    ied_settings_t out;
+    settings_result_t res;
+    TH_ASSERT(!settings_file_parse("87B_FUNCTION = MAYBE\n", ied_default_settings(), &out, &res));
+    TH_ASSERT(res.err[0].line == 1);
+    TH_ASSERT(!settings_file_parse("87B_BAY1_IN_ZONE = TRUE\n", ied_default_settings(), &out, &res));
+    bool ok = settings_file_parse("87B_FUNCTION = DISABLED\n87B_SLOPE1 = 60\n87B_SLOPE2 = 70\n87B_BAY4_IN_ZONE = NO\n",
+                                  ied_default_settings(), &out, &res);
+    TH_ASSERT(ok);
+    TH_ASSERT(res.count == 0);
+    TH_ASSERT(out.b87.enabled == 0u);
+    TH_ASSERT(out.b87.slope1_pct == 60.0f && out.b87.slope2_pct == 70.0f);
+    TH_ASSERT(out.b87.bay_in_zone[3] == 0u && out.b87.bay_in_zone[0] == 1u);
+    TH_ASSERT_NEAR(out.b87.base_a, 926.0, 0.5);
+    static char buf[8192];
+    size_t n = settings_file_write(&out, buf, sizeof(buf));
+    TH_ASSERT(n > 100u);
+    TH_ASSERT(strstr(buf, "87B_FUNCTION = DISABLED\n") != NULL);
+    TH_ASSERT(strstr(buf, "87B_SLOPE2 = 70\n") != NULL);
+    TH_ASSERT(strstr(buf, "87B_BAY4_IN_ZONE = NO\n") != NULL);
+}
+
 int main(void)
 {
+    test_87b_rules();
+    test_87b_keys_round_trip();
     test_defaults_valid();
     test_tms_out_of_range_rejected();
     test_zone_order_rejected();

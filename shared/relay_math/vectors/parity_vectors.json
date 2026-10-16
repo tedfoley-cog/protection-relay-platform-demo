@@ -277,6 +277,9 @@
     {"input": "81U_PICKUP_HZ", "value": 61, "violations": ["R-81-001"], "expect_contains": "R-81-001"},
     {"input": "BAY3_CT_PRIMARY_A", "value": 0, "violations": ["R-CT-001"], "expect_contains": "R-CT-001"},
     {"input": "BAY4_CT_SECONDARY_A", "value": 2, "violations": ["R-CT-002"], "expect_contains": "R-CT-002"},
-    {"input": "50P_PICKUP_A", "value": 500, "violations": ["R-50-001"], "expect_contains": "R-50-001"}
+    {"input": "50P_PICKUP_A", "value": 500, "violations": ["R-50-001"], "expect_contains": "R-50-001"},
+    {"input": "87B_PICKUP_PU", "value": 0.04, "violations": ["R-87B-001"], "expect_contains": "R-87B-001"},
+    {"input": "87B_SLOPE2_PCT", "value": 20, "violations": ["R-87B-005"], "expect_contains": "R-87B-005"},
+    {"input": "87B_BAYS_IN_ZONE", "value": 1, "violations": ["R-87B-008"], "expect_contains": "R-87B-008"}
   ]
 }

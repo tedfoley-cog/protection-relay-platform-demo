@@ -17,6 +17,7 @@
 
 #include "bay_config.h"
 #include "breaker_failure.h"
+#include "bus_diff_87b.h"
 #include "distance.h"
 #include "event_recorder.h"
 #include "freq_element.h"
@@ -46,6 +47,7 @@ typedef struct {
     distance_settings_t dist;
     bf_settings_t bf;
     freq_settings_t freq;
+    bus_diff_87b_settings_t b87;
     trip_matrix_settings_t matrix;
     uint16_t pmu_idcode;
     const char *station;
@@ -69,6 +71,7 @@ typedef struct {
     uint32_t ring_overruns;
     uint32_t invalid_mask;           /* channels not valid in the last frame */
     uint32_t blocked_passes;         /* protection passes skipped for invalid bay-1 input */
+    bus_diff_87b_state_t b87;        /* 87B operands and actual values, last pass */
 } ied_status_t;
 
 typedef struct {

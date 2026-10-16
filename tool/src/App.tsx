@@ -4,16 +4,18 @@ import { DEFAULT_SETTINGS, SECTION_OF_RULE, checkSettings, type Settings } from 
 import BaysView from "./views/BaysView";
 import OvercurrentView from "./views/OvercurrentView";
 import ElementsView from "./views/ElementsView";
+import BusDiffView from "./views/BusDiffView";
 import RealtimeView from "./views/RealtimeView";
 import WriteDrawer from "./views/WriteDrawer";
 
-export type Route = "bays" | "overcurrent" | "distance" | "breaker-failure" | "frequency" | "realtime";
+export type Route = "bays" | "overcurrent" | "distance" | "breaker-failure" | "frequency" | "bus-diff" | "realtime";
 const ROUTES: Array<{ id: Route; label: string; group: string }> = [
   { id: "bays", label: "Bays and CT inputs", group: "Device setup" },
   { id: "overcurrent", label: "50/51 Overcurrent", group: "Protection elements" },
   { id: "distance", label: "21 Distance", group: "Protection elements" },
   { id: "breaker-failure", label: "50BF Breaker failure", group: "Protection elements" },
   { id: "frequency", label: "81 Frequency", group: "Protection elements" },
+  { id: "bus-diff", label: "87B Bus differential", group: "Protection elements" },
   { id: "realtime", label: "Real-time evidence", group: "Records" },
 ];
 
@@ -30,11 +32,11 @@ export default function App() {
   const [route, setRoute] = useState<Route>(readRoute);
   const [settings, setSettings] = useState<Settings>(() => {
     const saved = window.localStorage.getItem(STORAGE_KEY);
-    return saved ? (JSON.parse(saved) as Settings) : DEFAULT_SETTINGS;
+    return saved ? ({ ...DEFAULT_SETTINGS, ...(JSON.parse(saved) as Partial<Settings>) } as Settings) : DEFAULT_SETTINGS;
   });
   const [written, setWrittenState] = useState<Settings>(() => {
     const saved = window.localStorage.getItem(WRITTEN_KEY);
-    return saved ? (JSON.parse(saved) as Settings) : DEFAULT_SETTINGS;
+    return saved ? ({ ...DEFAULT_SETTINGS, ...(JSON.parse(saved) as Partial<Settings>) } as Settings) : DEFAULT_SETTINGS;
   });
   const setWritten = (s: Settings) => {
     window.localStorage.setItem(WRITTEN_KEY, JSON.stringify(s));
@@ -98,6 +100,7 @@ export default function App() {
           {(route === "distance" || route === "breaker-failure" || route === "frequency") && (
             <ElementsView section={route} settings={settings} onChange={setSettings} violations={bySection[route] ?? []} />
           )}
+          {route === "bus-diff" && <BusDiffView rm={rm} settings={settings} onChange={setSettings} violations={bySection["bus-diff"] ?? []} />}
           {route === "realtime" && <RealtimeView />}
         </main>
       </div>

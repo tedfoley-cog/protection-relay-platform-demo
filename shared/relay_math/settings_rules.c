@@ -30,6 +30,15 @@ static const rule_text_t k_text[RULE_COUNT] = {
     {"R-VT-001", "VT nominal phase-neutral voltage must be 50..500000 V"},
     {"R-CT-001", "bay CT rated primary must be 1..20000 A"},
     {"R-CT-002", "bay CT rated secondary must be 1 A or 5 A"},
+    {"R-87B-001", "87B pickup must be 0.05..2.00 pu"},
+    {"R-87B-002", "87B slope 1 must be 10..100 %"},
+    {"R-87B-003", "87B slope 2 must be 10..100 %"},
+    {"R-87B-004", "87B breakpoint must be 1.0..10.0 pu"},
+    {"R-87B-005", "87B slope 2 must not be below slope 1"},
+    {"R-87B-006", "87B CT supervision alarm must be 2..20 % of restraint"},
+    {"R-87B-007", "87B CT supervision delay must be 0.5..10.0 s"},
+    {"R-87B-008", "87B needs at least two bays in zone"},
+    {"R-87B-009", "87B base must be 1..1000 MVA"},
 };
 
 static const char *const k_input_names[RULES_IN_COUNT] = {
@@ -42,6 +51,8 @@ static const char *const k_input_names[RULES_IN_COUNT] = {
     "VT_V_LN_NOMINAL",
     "BAY1_CT_PRIMARY_A", "BAY1_CT_SECONDARY_A", "BAY2_CT_PRIMARY_A", "BAY2_CT_SECONDARY_A",
     "BAY3_CT_PRIMARY_A", "BAY3_CT_SECONDARY_A", "BAY4_CT_PRIMARY_A", "BAY4_CT_SECONDARY_A",
+    "87B_BASE_MVA", "87B_PICKUP_PU", "87B_SLOPE1_PCT", "87B_SLOPE2_PCT", "87B_BREAKPOINT_PU",
+    "87B_CTS_ALARM_PCT", "87B_CTS_DELAY_S", "87B_BAYS_IN_ZONE",
 };
 
 static int add(rule_violation_t *out, int max, int n, int code, int detail, float value)
@@ -142,6 +153,37 @@ int settings_rules_check(const float in[RULES_IN_COUNT], rule_violation_t *out, 
         if (!(sec == 1.0f || sec == 5.0f)) {
             n = add(out, max, n, RULE_CT_SECONDARY_VALUE, bay, sec);
         }
+    }
+
+    float pu = in[RULES_IN_87B_PICKUP_PU];
+    float s1 = in[RULES_IN_87B_SLOPE1_PCT];
+    float s2 = in[RULES_IN_87B_SLOPE2_PCT];
+    if (!in_range(pu, 0.05f, 2.0f)) {
+        n = add(out, max, n, RULE_87B_PICKUP_RANGE, 0, pu);
+    }
+    if (!in_range(s1, 10.0f, 100.0f)) {
+        n = add(out, max, n, RULE_87B_SLOPE1_RANGE, 0, s1);
+    }
+    if (!in_range(s2, 10.0f, 100.0f)) {
+        n = add(out, max, n, RULE_87B_SLOPE2_RANGE, 0, s2);
+    }
+    if (!in_range(in[RULES_IN_87B_BREAKPOINT_PU], 1.0f, 10.0f)) {
+        n = add(out, max, n, RULE_87B_BREAKPOINT_RANGE, 0, in[RULES_IN_87B_BREAKPOINT_PU]);
+    }
+    if (s2 < s1) {
+        n = add(out, max, n, RULE_87B_SLOPE_ORDER, 0, s2);
+    }
+    if (!in_range(in[RULES_IN_87B_CTS_ALARM_PCT], 2.0f, 20.0f)) {
+        n = add(out, max, n, RULE_87B_CTS_PCT_RANGE, 0, in[RULES_IN_87B_CTS_ALARM_PCT]);
+    }
+    if (!in_range(in[RULES_IN_87B_CTS_DELAY_S], 0.5f, 10.0f)) {
+        n = add(out, max, n, RULE_87B_CTS_DELAY_RANGE, 0, in[RULES_IN_87B_CTS_DELAY_S]);
+    }
+    if (in[RULES_IN_87B_BAYS_IN_ZONE] < 2.0f) {
+        n = add(out, max, n, RULE_87B_MIN_BAYS, 0, in[RULES_IN_87B_BAYS_IN_ZONE]);
+    }
+    if (!in_range(in[RULES_IN_87B_BASE_MVA], 1.0f, 1000.0f)) {
+        n = add(out, max, n, RULE_87B_BASE_RANGE, 0, in[RULES_IN_87B_BASE_MVA]);
     }
     return n;
 }

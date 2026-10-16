@@ -56,6 +56,14 @@ const char *soe_code_name(uint16_t code)
         return "INPUT_INVALID";
     case SOE_INPUT_VALID:
         return "INPUT_VALID";
+    case SOE_ELEMENT_BLOCKED:
+        return "ELEMENT_BLOCKED";
+    case SOE_ELEMENT_UNBLOCKED:
+        return "ELEMENT_UNBLOCKED";
+    case SOE_CTS_ALARM:
+        return "CTS_ALARM";
+    case SOE_CTS_ALARM_RESET:
+        return "CTS_ALARM_RESET";
     default:
         return "?";
     }

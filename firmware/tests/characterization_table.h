@@ -1,0 +1,9 @@
+    {"steady_load", 0x0000, false, false, -1, -1},
+    {"fault_ag_zone1", 0x0010, false, false, 6363, -1},
+    {"fault_bc_zone2", 0x0020, false, false, 6943, -1},
+    {"fault_ag_high_resistance", 0x0008, false, false, 8971, -1},
+    {"breaker_failure", 0x0410, false, true, 6363, 6659},
+    {"bus_fault_external", 0x0000, false, false, -1, -1},
+    /* 87B added: the only pin that changed from main (was 0x0000, no trip). */
+    {"bus_fault_internal", 0x0800, false, true, 6339, 6339},
+    {"ct_lost_bay1_load", 0x0000, false, false, -1, -1},
