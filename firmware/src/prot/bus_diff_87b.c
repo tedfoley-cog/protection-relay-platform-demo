@@ -48,6 +48,7 @@ void bus_diff_87b_init(bus_diff_87b_state_t *st, float x_over_r)
     }
     st->n = 0u;
     st->anchor = 0u;
+    st->invalid_seen = 0u;
 }
 
 float bus_diff_87b_threshold_pu(const bus_diff_87b_settings_t *s, float ir_pu)
@@ -63,9 +64,11 @@ float bus_diff_87b_threshold_pu(const bus_diff_87b_settings_t *s, float ir_pu)
 
 void bus_diff_87b_ingest(const bus_diff_87b_settings_t *s, bus_diff_87b_state_t *st,
                          const float raw_a[IED_NUM_BAYS][IED_PHASES],
-                         const int8_t into_bus_sign[IED_NUM_BAYS], uint32_t sample_in_second)
+                         const int8_t into_bus_sign[IED_NUM_BAYS], uint32_t sample_in_second,
+                         uint32_t frame_invalid_mask)
 {
     uint32_t slot = st->n & (BUS_DIFF_87B_WINDOW - 1u);
+    st->invalid_seen |= frame_invalid_mask;
     st->sis[slot] = sample_in_second;
     for (uint32_t ph = 0; ph < IED_PHASES; ph++) {
         float d = 0.0f;
@@ -113,6 +116,8 @@ bool bus_diff_87b_step(const bus_diff_87b_settings_t *s, bus_diff_87b_state_t *s
             zone_mask |= IED_BAY_MASK(bay);
         }
     }
+    invalid_mask |= st->invalid_seen;
+    st->invalid_seen = 0u;
     if ((invalid_mask & zone_mask) != 0u || s->base_a <= 0.0f) {
         /* Invalid is not zero: hold everything, including the CTS timers,
          * and re-arm so that no sample taken while invalid is ever decided on. */

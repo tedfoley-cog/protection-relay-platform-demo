@@ -156,6 +156,7 @@ export function toSettingsFile(s: Settings): string {
     lines.push(`BAY${n}_POLARITY = ${b.polarity}`);
     lines.push(`BAY${n}_CT_CONNECTED = ${b.ctConnected ? "YES" : "NO"}`);
   });
+  s.b87BayInZone.forEach((z, k) => lines.push(`87B_BAY${k + 1}_IN_ZONE = ${z ? "YES" : "NO"}`));
   return lines.join("\n") + "\n";
 }
 
@@ -173,6 +174,15 @@ export function parseSettingsFile(text: string, base: Settings): { settings: Set
     }
     const key = line.slice(0, eq).trim();
     const value = line.slice(eq + 1).trim();
+    const zone = /^87B_BAY([1-4])_IN_ZONE$/.exec(key);
+    if (zone) {
+      if (value !== "YES" && value !== "NO") errors.push(`line ${idx + 1}: ${key} must be YES or NO`);
+      else {
+        s.b87BayInZone = [...s.b87BayInZone];
+        s.b87BayInZone[Number(zone[1]) - 1] = value === "YES";
+      }
+      return;
+    }
     const bay = /^BAY([1-4])_(CT_PRIMARY_A|CT_SECONDARY_A|POLARITY|CT_CONNECTED)$/.exec(key);
     if (bay) {
       const b = s.bays[Number(bay[1]) - 1];

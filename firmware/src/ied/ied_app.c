@@ -293,7 +293,8 @@ static void ingest(const sample_frame_t *f)
             bay_a[bay][ph] = value[IED_CH_BAY_I(bay, ph)];
         }
     }
-    bus_diff_87b_ingest(&s_ied.s->b87, &s_ied.b87, bay_a, s_ied.b87_sign, f->sample_in_second);
+    bus_diff_87b_ingest(&s_ied.s->b87, &s_ied.b87, bay_a, s_ied.b87_sign, f->sample_in_second,
+                        f->invalid_mask);
     for (uint32_t k = 0; k < 4u; k++) {
         value[k_mimic_ch[k]] = mimic_step(&s_ied.mimic[k], value[k_mimic_ch[k]]);
     }
@@ -354,13 +355,20 @@ static void protection_pass(const sample_frame_t *f)
          * already blocked itself unless bay 1 is out of its zone. */
         op |= s_ied.freq_mask;
         bool tripb_was = s_ied.matrix.tripb;
+        bool trip1_was = s_ied.matrix.trip1;
         trip_matrix_step(&s->matrix, &s_ied.matrix, op, s_ied.breaker_open, false);
         if ((s_ied.matrix.rising & ELEM_BIT(ELEM_87B)) != 0u) {
             record(SOE_ELEMENT_OPERATE, ELEM_87B, s_ied.b87.id_pu[s_ied.b87.op_phase]);
         }
+        if (s_ied.matrix.trip1 && !trip1_was) {
+            record(SOE_TRIP1_ON, (uint16_t)s_ied.matrix.target, s_ied.b87.id_pu[s_ied.b87.op_phase]);
+        } else if (!s_ied.matrix.trip1 && trip1_was) {
+            record(SOE_TRIP1_OFF, 0u, 0.0f);
+        }
         if (s_ied.matrix.tripb && !tripb_was) {
             record(SOE_TRIPB_ON, ELEM_87B, s_ied.b87.id_pu[s_ied.b87.op_phase]);
         }
+        st->trip1 = s_ied.matrix.trip1;
         st->tripb = s_ied.matrix.tripb;
         st->operated = s_ied.matrix.operated;
         st->target = s_ied.matrix.target;

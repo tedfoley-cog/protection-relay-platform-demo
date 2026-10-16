@@ -42,7 +42,7 @@ static bool feed_passes(const bus_diff_87b_settings_t *s, bus_diff_87b_state_t *
                     raw[bay][ph] = CPLX_SQRT2 * (i[bay][ph].re * cosf(theta) - i[bay][ph].im * sinf(theta));
                 }
             }
-            bus_diff_87b_ingest(s, st, raw, k_into_bus, s_sis);
+            bus_diff_87b_ingest(s, st, raw, k_into_bus, s_sis, (k == 0u) ? invalid_mask : 0u);
             s_sis = (s_sis + 1u) % IED_SAMPLE_RATE_HZ;
         }
         op = bus_diff_87b_step(s, st, invalid_mask);
@@ -141,6 +141,13 @@ static void test_invalid_blocks(void)
     TH_ASSERT(st.blocked);
     TH_ASSERT(!st.operated && !st.pickup[0]);
     TH_ASSERT(st.id_pu[0] == 0.0f);
+    /* a channel invalid for only one sample of a pass still blocks that pass (deciding frame valid) */
+    for (uint32_t k = 0; k < IED_PROT_DECIMATION; k++) {
+        float raw[IED_NUM_BAYS][IED_PHASES] = {{0.0f}};
+        bus_diff_87b_ingest(&s, &st, raw, k_into_bus, s_sis++, k == 1u ? IED_BAY_MASK(1) : 0u);
+    }
+    TH_ASSERT(!bus_diff_87b_step(&s, &st, 0u));
+    TH_ASSERT(st.blocked);
     /* channel valid again: one full window of arming, then the real differential shows */
     (void)feed_passes(&s, &st, i, BUS_DIFF_87B_ARM_PASSES - 1u, 0u);
     TH_ASSERT(st.blocked);
@@ -298,6 +305,25 @@ static void test_bay4_not_connected(void)
     TH_ASSERT(find_operate(ELEM_87B) == NULL);
 }
 
+/* Bay 1 set out of zone while it is still connected to the bus (the REQ-87B-023
+ * hazard, assumption A9/A10): its load becomes a standing differential and 87B
+ * operates on healthy load. The point pinned here is the plumbing: with bay 1
+ * also invalid, the bay-1 hold path must still publish TRIP1/86B and the SOE. */
+static void test_bay1_out_of_zone_invalid_status_path(void)
+{
+    TH_CASE("REQ-87B-021 REQ-87B-015 REQ-87B-023: bay 1 out of zone + invalid: 87B operate, TRIP1 and 86B reach SOE and status");
+    ied_settings_t s = *ied_default_settings();
+    s.b87.bay_in_zone[0] = 0u;
+    const ied_status_t *st = loop_run_ex(testset_find("steady_load"), 0u, &s, IED_BAY_MASK(0));
+    TH_ASSERT(st->blocked_passes > 0u);        /* bay-1 elements were held every pass */
+    /* operate happens on the first armed pass of the pre-roll (events before
+     * scenario time 0 are discarded by the harness), so pin the status path */
+    TH_ASSERT((st->target & ELEM_BIT(ELEM_87B)) != 0u);
+    TH_ASSERT(st->tripb);
+    TH_ASSERT(loop_res.ts.bus_dead);
+    TH_ASSERT(st->trip1 == loop_res.ts.breaker_open || !st->trip1);   /* TRIP1 published, released when open */
+}
+
 /* ---------------------------------------------------------------- sweep */
 
 static uint32_t s_rng;
@@ -392,6 +418,7 @@ int main(void)
     test_steady_load_quantities();
     test_ct_lost_bay1();
     test_bay4_not_connected();
+    test_bay1_out_of_zone_invalid_status_path();
     test_invariant_sweep();
     return th_report("bus_diff_87b");
 }

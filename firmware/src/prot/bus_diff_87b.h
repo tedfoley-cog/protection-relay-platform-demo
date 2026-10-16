@@ -60,6 +60,7 @@ typedef struct {
     float sq_sum[IED_NUM_BAYS][IED_PHASES];                 /* sliding sum over the window */
     mimic_filter_t mimic[IED_PHASES];
     uint32_t n;           /* samples ingested */
+    uint32_t invalid_seen; /* channel mask OR-ed over the frames ingested since the last step */
     uint32_t anchor;      /* next (bay, phase) whose sq_sum is recomputed exactly */
 } bus_diff_87b_state_t;
 
@@ -73,10 +74,13 @@ float bus_diff_87b_threshold_pu(const bus_diff_87b_settings_t *s, float ir_pu);
  * into the bus, -1 otherwise. */
 void bus_diff_87b_ingest(const bus_diff_87b_settings_t *s, bus_diff_87b_state_t *st,
                          const float raw_a[IED_NUM_BAYS][IED_PHASES],
-                         const int8_t into_bus_sign[IED_NUM_BAYS], uint32_t sample_in_second);
+                         const int8_t into_bus_sign[IED_NUM_BAYS], uint32_t sample_in_second,
+                         uint32_t frame_invalid_mask);
 
-/* One protection pass. invalid_mask is the frame's channel mask. Returns
- * st->operated. */
+/* One protection pass. invalid_mask is the deciding frame's channel mask; it
+ * is OR-ed with every mask seen by ingest() since the previous step, so a
+ * channel that was invalid for any sample of the pass blocks the pass.
+ * Returns st->operated. */
 bool bus_diff_87b_step(const bus_diff_87b_settings_t *s, bus_diff_87b_state_t *st,
                        uint32_t invalid_mask);
 

@@ -155,6 +155,7 @@ test("journey 6: 87B slope order rule blocks the write, corrected settings are a
   await expect(page.getByTestId("write-ready")).toBeVisible();
   await expect(page.getByTestId("settings-file")).toContainText("87B_SLOPE1 = 60");
   await expect(page.getByTestId("settings-file")).toContainText("87B_SLOPE2 = 70");
+  await expect(page.getByTestId("settings-file")).toContainText("87B_BAY4_IN_ZONE = YES");
   await page.getByTestId("write-confirm").check();
   await page.getByTestId("write-apply").click();
   await expect(page.getByTestId("write-drawer")).toHaveCount(0);
