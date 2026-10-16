@@ -267,16 +267,19 @@
     {"mva": 20, "kv_ll": 12.47, "base_a": 925.982849}
   ],
   "rules": [
-    {"input": "", "value": 0, "violations": ["R-87B-001", "R-87B-002", "R-87B-003", "R-87B-004", "R-87B-006", "R-87B-007", "R-87B-008", "R-87B-009"], "expect_contains": ""},
-    {"input": "51P_TMS", "value": 0.01, "violations": ["R-51-002", "R-87B-001", "R-87B-002", "R-87B-003", "R-87B-004", "R-87B-006", "R-87B-007", "R-87B-008", "R-87B-009"], "expect_contains": "R-51-002"},
-    {"input": "51P_PICKUP_A", "value": 5, "violations": ["R-51-001", "R-51-005", "R-87B-001", "R-87B-002", "R-87B-003", "R-87B-004", "R-87B-006", "R-87B-007", "R-87B-008", "R-87B-009"], "expect_contains": "R-51-001"},
-    {"input": "51P_CURVE", "value": 42, "violations": ["R-51-003", "R-87B-001", "R-87B-002", "R-87B-003", "R-87B-004", "R-87B-006", "R-87B-007", "R-87B-008", "R-87B-009"], "expect_contains": "R-51-003"},
-    {"input": "21_Z1_REACH_PCT", "value": 130, "violations": ["R-21-001", "R-21-003", "R-87B-001", "R-87B-002", "R-87B-003", "R-87B-004", "R-87B-006", "R-87B-007", "R-87B-008", "R-87B-009"], "expect_contains": "R-21-001"},
-    {"input": "21_Z2_REACH_PCT", "value": 70, "violations": ["R-21-002", "R-21-003", "R-87B-001", "R-87B-002", "R-87B-003", "R-87B-004", "R-87B-006", "R-87B-007", "R-87B-008", "R-87B-009"], "expect_contains": "R-21-002"},
-    {"input": "50BF_RETRIP_S", "value": 0.2, "violations": ["R-BF-002", "R-87B-001", "R-87B-002", "R-87B-003", "R-87B-004", "R-87B-006", "R-87B-007", "R-87B-008", "R-87B-009"], "expect_contains": "R-BF-002"},
-    {"input": "81U_PICKUP_HZ", "value": 61, "violations": ["R-81-001", "R-87B-001", "R-87B-002", "R-87B-003", "R-87B-004", "R-87B-006", "R-87B-007", "R-87B-008", "R-87B-009"], "expect_contains": "R-81-001"},
-    {"input": "BAY3_CT_PRIMARY_A", "value": 0, "violations": ["R-CT-001", "R-87B-001", "R-87B-002", "R-87B-003", "R-87B-004", "R-87B-006", "R-87B-007", "R-87B-008", "R-87B-009"], "expect_contains": "R-CT-001"},
-    {"input": "BAY4_CT_SECONDARY_A", "value": 2, "violations": ["R-CT-002", "R-87B-001", "R-87B-002", "R-87B-003", "R-87B-004", "R-87B-006", "R-87B-007", "R-87B-008", "R-87B-009"], "expect_contains": "R-CT-002"},
-    {"input": "50P_PICKUP_A", "value": 500, "violations": ["R-50-001", "R-87B-001", "R-87B-002", "R-87B-003", "R-87B-004", "R-87B-006", "R-87B-007", "R-87B-008", "R-87B-009"], "expect_contains": "R-50-001"}
+    {"input": "", "value": 0, "violations": [], "expect_contains": ""},
+    {"input": "51P_TMS", "value": 0.01, "violations": ["R-51-002"], "expect_contains": "R-51-002"},
+    {"input": "51P_PICKUP_A", "value": 5, "violations": ["R-51-001", "R-51-005"], "expect_contains": "R-51-001"},
+    {"input": "51P_CURVE", "value": 42, "violations": ["R-51-003"], "expect_contains": "R-51-003"},
+    {"input": "21_Z1_REACH_PCT", "value": 130, "violations": ["R-21-001", "R-21-003"], "expect_contains": "R-21-001"},
+    {"input": "21_Z2_REACH_PCT", "value": 70, "violations": ["R-21-002", "R-21-003"], "expect_contains": "R-21-002"},
+    {"input": "50BF_RETRIP_S", "value": 0.2, "violations": ["R-BF-002"], "expect_contains": "R-BF-002"},
+    {"input": "81U_PICKUP_HZ", "value": 61, "violations": ["R-81-001"], "expect_contains": "R-81-001"},
+    {"input": "BAY3_CT_PRIMARY_A", "value": 0, "violations": ["R-CT-001"], "expect_contains": "R-CT-001"},
+    {"input": "BAY4_CT_SECONDARY_A", "value": 2, "violations": ["R-CT-002"], "expect_contains": "R-CT-002"},
+    {"input": "50P_PICKUP_A", "value": 500, "violations": ["R-50-001"], "expect_contains": "R-50-001"},
+    {"input": "87B_PICKUP_PU", "value": 0.04, "violations": ["R-87B-001"], "expect_contains": "R-87B-001"},
+    {"input": "87B_SLOPE2_PCT", "value": 20, "violations": ["R-87B-005"], "expect_contains": "R-87B-005"},
+    {"input": "87B_BAYS_IN_ZONE", "value": 1, "violations": ["R-87B-008"], "expect_contains": "R-87B-008"}
   ]
 }
