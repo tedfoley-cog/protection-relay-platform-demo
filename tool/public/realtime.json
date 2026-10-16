@@ -1,14 +1,14 @@
 {
-  "generated_at": "2026-10-15T22:35:50+00:00",
-  "label": "baseline",
+  "generated_at": "2026-10-16T14:13:29+00:00",
+  "label": "87b",
   "target": {
     "mcu": "STM32F407VG",
     "core": "Cortex-M4F",
     "cpu_hz": 168000000,
     "emulator": "Renode 1.15.3",
     "resolution_cycles": 168,
-    "flash_bytes": 40404,
-    "ram_bytes": 16760,
+    "flash_bytes": 43084,
+    "ram_bytes": 21328,
     "method": "DWT cycle counter on the emulated core; instruction-accurate at 168 MIPS, no pipeline or flash wait-state model"
   },
   "rates": {
@@ -17,14 +17,14 @@
     "pmu_hz": 60,
     "comms_hz": 120
   },
-  "worst_util_pct": 3.77,
+  "worst_util_pct": 5.89,
   "tasks": [
     {
       "task": "acq_isr",
       "rate_hz": 1920,
       "budget_cycles": 2000,
       "max_cycles": 168,
-      "mean_cycles": 108,
+      "mean_cycles": 105,
       "max_us": 1.0,
       "headroom_pct": 91.6,
       "worst_scenario": "steady_load",
@@ -34,33 +34,33 @@
       "task": "protection",
       "rate_hz": 480,
       "budget_cycles": 12000,
-      "max_cycles": 6447,
-      "mean_cycles": 5994,
-      "max_us": 38.4,
-      "headroom_pct": 46.3,
-      "worst_scenario": "fault_ag_zone1",
+      "max_cycles": 11529,
+      "mean_cycles": 11069,
+      "max_us": 68.6,
+      "headroom_pct": 3.9,
+      "worst_scenario": "bus_fault_internal",
       "status": "within budget"
     },
     {
       "task": "pmu",
       "rate_hz": 60,
       "budget_cycles": 30000,
-      "max_cycles": 16779,
-      "mean_cycles": 16690,
-      "max_us": 99.9,
-      "headroom_pct": 44.1,
-      "worst_scenario": "steady_load",
+      "max_cycles": 16884,
+      "mean_cycles": 16694,
+      "max_us": 100.5,
+      "headroom_pct": 43.7,
+      "worst_scenario": "bus_fault_internal",
       "status": "within budget"
     },
     {
       "task": "comms",
       "rate_hz": 120,
       "budget_cycles": 40000,
-      "max_cycles": 15960,
-      "mean_cycles": 4665,
-      "max_us": 95.0,
-      "headroom_pct": 60.1,
-      "worst_scenario": "fault_ag_zone1",
+      "max_cycles": 25200,
+      "mean_cycles": 4715,
+      "max_us": 150.0,
+      "headroom_pct": 37.0,
+      "worst_scenario": "bus_fault_internal",
       "status": "within budget"
     }
   ],
@@ -76,7 +76,7 @@
       ],
       "bus_trip": false,
       "trip_ms": null,
-      "util_pct": 3.21,
+      "util_pct": 4.67,
       "pass": true
     },
     {
@@ -90,7 +90,7 @@
       ],
       "bus_trip": false,
       "trip_ms": 14.1,
-      "util_pct": 3.77,
+      "util_pct": 5.2,
       "pass": true
     },
     {
@@ -104,7 +104,7 @@
       ],
       "bus_trip": false,
       "trip_ms": 316.1,
-      "util_pct": 3.73,
+      "util_pct": 5.2,
       "pass": true
     },
     {
@@ -118,7 +118,7 @@
       ],
       "bus_trip": false,
       "trip_ms": 1372.4,
-      "util_pct": 3.66,
+      "util_pct": 5.14,
       "pass": true
     },
     {
@@ -134,7 +134,7 @@
       ],
       "bus_trip": true,
       "trip_ms": 14.1,
-      "util_pct": 3.77,
+      "util_pct": 5.2,
       "pass": true
     },
     {
@@ -148,21 +148,21 @@
       ],
       "bus_trip": false,
       "trip_ms": null,
-      "util_pct": 3.21,
+      "util_pct": 4.67,
       "pass": true
     },
     {
       "name": "bus_fault_internal",
-      "description": "A-G fault on the bus (internal): no bus protection on this relay",
+      "description": "A-G fault on the bus (internal): 87B trips the bus through 86B",
       "expected": [
-        "no trip"
+        "87B"
       ],
       "observed": [
-        "no trip"
+        "87B"
       ],
-      "bus_trip": false,
-      "trip_ms": null,
-      "util_pct": 3.24,
+      "bus_trip": true,
+      "trip_ms": 1.6,
+      "util_pct": 5.89,
       "pass": true
     },
     {
@@ -176,7 +176,7 @@
       ],
       "bus_trip": false,
       "trip_ms": null,
-      "util_pct": 2.8,
+      "util_pct": 3.29,
       "pass": true
     }
   ],
